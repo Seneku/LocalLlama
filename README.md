@@ -30,14 +30,29 @@ bun run dev
 
 On first launch, if llama.cpp isn't detected you'll see a banner prompting you to open **Settings** and set your llama.cpp root. Then create a profile, point it at a `.gguf`, and hit **Start**.
 
-### Production / standalone
+### Run from source (single process)
 
 ```sh
 bun run build     # type-check + bundle the frontend into dist/
-bun run start     # serve the built app + API from a single process (port 4187)
+bun run start     # serve the built app + API from one process (port 4187)
 ```
 
-`bun run restart` (or `scripts/restart-llamatuner.cmd`) stops a running standalone server and its llama.cpp children, rebuilds, and relaunches — handy since `start` runs without `--watch`.
+`bun run restart` (or `scripts/restart-llamatuner.cmd`) stops a running server and its llama.cpp children, rebuilds, and relaunches — handy since `start` runs without `--watch`.
+
+### Package as a standalone executable
+
+```sh
+bun run package   # builds the UI, inlines it, and compiles dist/LlamaTuner.exe
+```
+
+This produces a single **`LlamaTuner.exe`** (~110 MB — it bundles the Bun runtime and the whole UI). It needs no installed Bun, no `dist/` folder, and no source. Double-click it (or run it from a terminal) and it:
+
+1. starts the API + UI server on port `4187` (falls back to the next free port if taken),
+2. opens the app in your default browser.
+
+Close the console window or press `Ctrl+C` to stop it. Profiles, benchmark history, and settings are stored in a `data/` folder next to the executable (override with `LLAMATUNER_DATA_DIR`). Set `LLAMATUNER_NO_OPEN=1` to skip auto-opening the browser.
+
+You still need a local llama.cpp build; point the app at it from the **Settings** screen on first run.
 
 ## Configuration
 

@@ -27,6 +27,11 @@ interface AppDeps {
   runtime?: RuntimeManager;
   benchmarkStore?: BenchmarkStore;
   benchmark?: BenchmarkManager;
+  /**
+   * Self-contained SPA HTML. When provided (standalone/compiled builds), all
+   * non-API GET requests serve this instead of reading files from dist/.
+   */
+  appHtml?: string;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -279,11 +284,20 @@ function serveStatic(response: ServerResponse, pathname: string): void {
   fs.createReadStream(filePath).pipe(response);
 }
 
+function serveAppHtml(response: ServerResponse, html: string, method: string): void {
+  response.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  response.end(method === "HEAD" ? undefined : html);
+}
+
 export function createRequestHandler(deps: AppDeps = {}) {
   const store = deps.store ?? createProfileStore();
   const runtime = deps.runtime ?? new RuntimeManager();
   const benchmarkStore = deps.benchmarkStore ?? createBenchmarkStore();
   const benchmark = deps.benchmark ?? new BenchmarkManager(benchmarkStore);
+  const appHtml = deps.appHtml;
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
@@ -294,6 +308,12 @@ export function createRequestHandler(deps: AppDeps = {}) {
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
         sendError(response, 405, "method not allowed");
+        return;
+      }
+      // Compiled/standalone builds embed a single-file SPA; dev/dist builds
+      // fall back to serving files from the dist/ directory.
+      if (appHtml) {
+        serveAppHtml(response, appHtml, request.method);
         return;
       }
       serveStatic(response, url.pathname);
