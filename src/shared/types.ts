@@ -42,6 +42,23 @@ export interface LlamaProfile {
   speculative: SpeculativeSettings;
 }
 
+/**
+ * User-editable path overrides. Empty string = use the default derived from
+ * llamaRoot (or the LLAMATUNER_* environment variables).
+ */
+export interface AppSettings {
+  llamaRoot: string;
+  cudaServerPath: string;
+  cpuServerPath: string;
+  cudaBenchPath: string;
+  cpuBenchPath: string;
+}
+
+export interface SettingsResponse {
+  settings: AppSettings;
+  config: RuntimeConfig;
+}
+
 export interface RuntimeConfig {
   llamaRoot: string;
   cudaServerPath: string;
@@ -229,8 +246,17 @@ export interface MemoryEstimateBreakdown {
   safetyMarginMiB: number;
 }
 
+/** The largest GPU-layer count that fits the currently free VRAM. */
+export interface VramRecommendation {
+  gpuLayers: number;
+  estimatedVramMiB: number;
+  vramHeadroomMiB: number;
+  fullOffload: boolean;
+}
+
 export interface MemoryEstimate {
   backend: ResolvedBackend;
+  recommendation: VramRecommendation | null;
   fit: EstimateFit;
   confidence: EstimateConfidence;
   totalVramMiB: number | null;

@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Save,
   Server,
+  Settings,
   Square,
   Terminal,
   Trash2
@@ -19,6 +20,7 @@ import { api } from "./api";
 import { BenchmarkDashboard } from "./components/BenchmarkDashboard";
 import { LogView } from "./components/LogView";
 import { RequirementsPanel } from "./components/RequirementsPanel";
+import { SettingsModal } from "./components/SettingsModal";
 import { ToastStack, useToasts } from "./components/Toasts";
 import { ConfirmButton, CopyButton, NumberField, SelectField, TextField, ToggleField } from "./components/ui";
 import type {
@@ -90,6 +92,7 @@ export default function App() {
   const [status, setStatus] = useState<RuntimeStatus>(emptyStatus);
   const [logs, setLogs] = useState<RuntimeLog[]>([]);
   const [busy, setBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { toasts, notify, dismiss } = useToasts();
 
   const selectedProfile = useMemo(
@@ -359,10 +362,19 @@ export default function App() {
           {status.profileName ? <span className="status-name">{status.profileName}</span> : null}
           {uptime ? <span className="status-uptime">up {uptime}</span> : null}
           {status.health === "unreachable" ? <span className="state-chip unreachable">unreachable</span> : null}
+          <button className="icon-button" title="Settings" onClick={() => setSettingsOpen(true)}>
+            <Settings size={16} />
+          </button>
         </div>
       </header>
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onConfigChanged={setConfig}
+        notify={notify}
+      />
 
       <section className="workspace">
         <aside className="profiles-panel">
@@ -689,7 +701,14 @@ export default function App() {
             </div>
           ) : null}
 
-          <RequirementsPanel profile={draft} onMessage={notify} />
+          <RequirementsPanel
+            profile={draft}
+            onMessage={notify}
+            onApplyGpuLayers={(gpuLayers) => {
+              updateDraft("gpuLayers", gpuLayers);
+              notify(`GPU layers set to ${gpuLayers}. Save the profile to keep it.`, "info");
+            }}
+          />
         </aside>
       </section>
 

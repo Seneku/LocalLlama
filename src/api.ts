@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   BenchmarkCommandPreview,
   BenchmarkRun,
   BenchmarkSettings,
@@ -8,7 +9,8 @@ import type {
   MemoryEstimate,
   RuntimeConfig,
   RuntimeLog,
-  RuntimeStatus
+  RuntimeStatus,
+  SettingsResponse
 } from "./shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -32,6 +34,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   config: () => request<RuntimeConfig>("/api/config"),
+  settings: () => request<SettingsResponse>("/api/settings"),
+  saveSettings: (settings: AppSettings) =>
+    request<SettingsResponse>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings)
+    }),
   profiles: () => request<LlamaProfile[]>("/api/profiles"),
   createProfile: (profile: LlamaProfile) =>
     request<LlamaProfile>("/api/profiles", {

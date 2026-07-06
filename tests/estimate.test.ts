@@ -173,6 +173,44 @@ describe("memory estimates", () => {
     expect(estimate.breakdown.kvCacheMiB).toBeLessThan(4300);
     expect(estimate.vramHeadroomMiB).not.toBeNull();
     expect(estimate.assumptions.some((item) => item.includes("full model offload"))).toBe(true);
+    // Everything fits at full offload, so there is nothing better to recommend.
+    expect(estimate.recommendation).toBeNull();
+  });
+
+  test("recommends the largest gpu-layer count that fits free VRAM", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 12288, parallelSlots: 1 });
+    const tightHardware: HardwareInfo = {
+      ...hardware,
+      gpus: [{ name: "RTX 4070 SUPER", totalMiB: 12281, usedMiB: 4600, freeMiB: 7681 }]
+    };
+    const estimate = await estimateProfileMemory(profile, {
+      hardware: tightHardware,
+      metadata: gemmaMetadata,
+      layout: gemmaLayout(),
+      fileExists: () => true
+    });
+
+    expect(estimate.fit).toBe("over");
+    expect(estimate.recommendation).not.toBeNull();
+    expect(estimate.recommendation!.gpuLayers).toBeGreaterThan(0);
+    expect(estimate.recommendation!.gpuLayers).toBeLessThan(49);
+    expect(estimate.recommendation!.fullOffload).toBe(false);
+    // The recommended setting must itself fit the free VRAM.
+    expect(estimate.recommendation!.estimatedVramMiB).toBeLessThanOrEqual(7681 - 128);
+    expect(estimate.recommendation!.vramHeadroomMiB).toBeGreaterThanOrEqual(0);
+  });
+
+  test("recommends offloading more when there is headroom", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 10, contextSize: 12288, parallelSlots: 1 });
+    const estimate = await estimateProfileMemory(profile, {
+      hardware,
+      metadata: gemmaMetadata,
+      layout: gemmaLayout(),
+      fileExists: () => true
+    });
+
+    expect(estimate.recommendation).not.toBeNull();
+    expect(estimate.recommendation!.gpuLayers).toBeGreaterThan(10);
   });
 
   test("sliding-window attention caps SWA layer KV at the window size", async () => {

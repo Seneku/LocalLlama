@@ -914,6 +914,46 @@ dd.bad {
   color: var(--red);
 }
 
+.recommendation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  color: var(--green-soft);
+  background: var(--green-bg);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.recommendation svg {
+  flex: none;
+}
+
+.recommendation > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recommendation strong {
+  color: #eafff3;
+}
+
+.recommendation small {
+  color: #8fbfa9;
+  font-weight: 500;
+}
+
+.recommendation .apply-recommendation {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border-color: var(--green-border);
+  font-size: var(--font-sm);
+}
+
 .requirement-advice {
   display: flex;
   align-items: flex-start;
@@ -1284,6 +1324,65 @@ dd.bad {
 .compare-table td small {
   color: var(--text-faint);
   font-weight: 500;
+}
+
+/* ---------- Settings modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  background: rgba(8, 10, 13, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  width: min(640px, 100%);
+  max-height: 84vh;
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: #141a20;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.modal .panel-title .icon-button {
+  margin-left: auto;
+}
+
+.modal-hint {
+  margin: 10px 0 0;
+  color: var(--text-dim);
+  font-size: var(--font-md);
+  line-height: 1.5;
+}
+
+.settings-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.settings-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.settings-path-row .pill {
+  margin-bottom: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 /* ---------- Logs ---------- */

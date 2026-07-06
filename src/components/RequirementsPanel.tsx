@@ -1,4 +1,4 @@
-import { Gauge, HardDrive, Info, TriangleAlert } from "lucide-react";
+import { Gauge, HardDrive, Info, TriangleAlert, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
@@ -8,6 +8,7 @@ import type { Notify } from "./Toasts";
 interface RequirementsPanelProps {
   profile: LlamaProfile | null;
   onMessage: Notify;
+  onApplyGpuLayers?(gpuLayers: number): void;
 }
 
 function formatGb(value: number | null, digits = 2): string {
@@ -42,7 +43,7 @@ function fitLabel(estimate: MemoryEstimate | null): string {
   }
 }
 
-export function RequirementsPanel({ profile, onMessage }: RequirementsPanelProps) {
+export function RequirementsPanel({ profile, onMessage, onApplyGpuLayers }: RequirementsPanelProps) {
   const [estimate, setEstimate] = useState<MemoryEstimate | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -138,7 +139,39 @@ export function RequirementsPanel({ profile, onMessage }: RequirementsPanelProps
         <Stat label="VRAM Headroom" value={formatGb(estimate?.vramHeadroomMiB ?? null)} tone={estimate?.fit === "over" ? "bad" : "normal"} />
       </div>
 
-      {estimate?.fit === "over" ? (
+      {estimate?.recommendation && profile ? (
+        <div className="recommendation">
+          <Wand2 size={15} />
+          <div>
+            <span>
+              {estimate.recommendation.gpuLayers >
+              Math.min(profile.gpuLayers, (estimate.model.blockCount ?? 98) + 1)
+                ? "Headroom available — offload more:"
+                : "To fit current free VRAM:"}{" "}
+              set GPU layers to{" "}
+              <strong>
+                {estimate.recommendation.fullOffload ? "999 (full offload)" : estimate.recommendation.gpuLayers}
+              </strong>
+            </span>
+            <small>
+              ~{formatGb(estimate.recommendation.estimatedVramMiB)} VRAM,{" "}
+              {formatGb(estimate.recommendation.vramHeadroomMiB)} headroom
+            </small>
+          </div>
+          <button
+            className="apply-recommendation"
+            title="Apply recommended GPU layers to the profile"
+            onClick={() =>
+              onApplyGpuLayers?.(
+                estimate.recommendation!.fullOffload ? 999 : estimate.recommendation!.gpuLayers
+              )
+            }
+            disabled={!onApplyGpuLayers}
+          >
+            Apply
+          </button>
+        </div>
+      ) : estimate?.fit === "over" ? (
         <div className="requirement-advice">
           <TriangleAlert size={15} />
           <span>Try lowering context size, GPU layers, parallel slots, or closing other GPU-heavy apps.</span>

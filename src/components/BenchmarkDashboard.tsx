@@ -10,6 +10,7 @@ import type {
   BenchmarkStatus,
   FlashAttentionMode,
   LlamaProfile,
+  ResolvedBackend,
   RuntimeLog
 } from "../shared/types";
 import { LogView } from "./LogView";
@@ -105,6 +106,9 @@ export function BenchmarkDashboard({
   const [logs, setLogs] = useState<RuntimeLog[]>([]);
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [profileFilter, setProfileFilter] = useState<string>("all");
+  const [backendFilter, setBackendFilter] = useState<ResolvedBackend | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "incomplete">("all");
 
   const running = status.state === "running";
 
@@ -114,8 +118,39 @@ export function BenchmarkDashboard({
   );
   const latestRun = selectedRuns[0] ?? runs.find((run) => run.status === "completed") ?? null;
   const previousRun = selectedRuns[1] ?? null;
-  const maxPrompt = Math.max(1, ...runs.map((run) => run.metrics.promptTokensPerSecond ?? 0));
-  const maxGeneration = Math.max(1, ...runs.map((run) => run.metrics.generationTokensPerSecond ?? 0));
+
+  const profileNames = useMemo(() => {
+    const names: string[] = [];
+    for (const run of runs) {
+      if (!names.includes(run.profileName)) {
+        names.push(run.profileName);
+      }
+    }
+    return names;
+  }, [runs]);
+  const hasCuda = runs.some((run) => run.backend === "CUDA");
+  const hasCpu = runs.some((run) => run.backend === "CPU");
+  const showBackendFilter = hasCuda && hasCpu;
+  const hasIncomplete = runs.some((run) => run.status !== "completed");
+
+  const matchesProfile = (run: BenchmarkRun) => profileFilter === "all" || run.profileName === profileFilter;
+  const matchesBackend = (run: BenchmarkRun) =>
+    !showBackendFilter || backendFilter === "all" || run.backend === backendFilter;
+  const matchesStatus = (run: BenchmarkRun) => {
+    if (!hasIncomplete || statusFilter === "all") {
+      return true;
+    }
+    return statusFilter === "completed" ? run.status === "completed" : run.status !== "completed";
+  };
+
+  const filteredRuns = useMemo(
+    () => runs.filter((run) => matchesProfile(run) && matchesBackend(run) && matchesStatus(run)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [runs, profileFilter, backendFilter, statusFilter, showBackendFilter, hasIncomplete]
+  );
+
+  const maxPrompt = Math.max(1, ...filteredRuns.map((run) => run.metrics.promptTokensPerSecond ?? 0));
+  const maxGeneration = Math.max(1, ...filteredRuns.map((run) => run.metrics.generationTokensPerSecond ?? 0));
   const compareRuns = useMemo(
     () => compareIds.map((id) => runs.find((run) => run.id === id)).filter((run): run is BenchmarkRun => Boolean(run)),
     [compareIds, runs]
@@ -392,6 +427,78 @@ export function BenchmarkDashboard({
             <span>Results</span>
             <small className="panel-hint">check runs to compare</small>
           </div>
+          {runs.length > 0 ? (
+            <>
+              <div className="log-toolbar">
+                {profileNames.length > 6 ? (
+                  <label className="field">
+                    <select value={profileFilter} onChange={(event) => setProfileFilter(event.target.value)}>
+                      <option value="all">All profiles ({runs.length})</option>
+                      {profileNames.map((name) => (
+                        <option key={name} value={name}>
+                          {name} ({runs.filter((run) => run.profileName === name).length})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <>
+                    <button
+                      className={`chip ${profileFilter === "all" ? "active" : ""}`}
+                      onClick={() => setProfileFilter("all")}
+                    >
+                      All
+                      <small>{runs.length}</small>
+                    </button>
+                    {profileNames.map((name) => (
+                      <button
+                        key={name}
+                        className={`chip ${profileFilter === name ? "active" : ""}`}
+                        onClick={() => setProfileFilter(name)}
+                      >
+                        {name}
+                        <small>{runs.filter((run) => run.profileName === name).length}</small>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+              {showBackendFilter ? (
+                <div className="log-toolbar">
+                  {(["all", "CUDA", "CPU"] as const).map((key) => (
+                    <button
+                      key={key}
+                      className={`chip ${backendFilter === key ? "active" : ""}`}
+                      onClick={() => setBackendFilter(key)}
+                    >
+                      {key === "all" ? "All" : key}
+                      <small>{key === "all" ? runs.length : runs.filter((run) => run.backend === key).length}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {hasIncomplete ? (
+                <div className="log-toolbar">
+                  {(["all", "completed", "incomplete"] as const).map((key) => (
+                    <button
+                      key={key}
+                      className={`chip ${statusFilter === key ? "active" : ""}`}
+                      onClick={() => setStatusFilter(key)}
+                    >
+                      {key === "all" ? "All" : key === "completed" ? "completed" : "failed+cancelled"}
+                      <small>
+                        {key === "all"
+                          ? runs.length
+                          : key === "completed"
+                            ? runs.filter((run) => run.status === "completed").length
+                            : runs.filter((run) => run.status !== "completed").length}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : null}
           <div className="result-table">
             <div className="result-row header">
               <span />
@@ -404,8 +511,10 @@ export function BenchmarkDashboard({
             </div>
             {runs.length === 0 ? (
               <div className="empty result-empty">No benchmark results yet.</div>
+            ) : filteredRuns.length === 0 ? (
+              <div className="empty result-empty">No runs match the current filters.</div>
             ) : (
-              runs.map((run) => (
+              filteredRuns.map((run) => (
                 <div
                   key={run.id}
                   className={`result-row ${run.status} ${compareIds.includes(run.id) ? "compared" : ""}`}

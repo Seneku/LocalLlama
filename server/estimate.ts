@@ -379,6 +379,61 @@ function estimateDraftMiB(profile: LlamaProfile, backend: ResolvedBackend, fileE
   }
 }
 
+function vramForGpuLayers(
+  profile: LlamaProfile,
+  metadata: ModelMetadata,
+  layout: GgufTensorLayout | null,
+  gpuLayers: number,
+  draftMiB: number
+): number {
+  const candidate = { ...profile, gpuLayers };
+  const plan = buildModelPlan(candidate, metadata, layout, "CUDA");
+  const kv = estimateKv(candidate, metadata, plan);
+  const overhead = computeOverheadMiB(candidate, metadata, "CUDA");
+  const preMargin = plan.gpuWeightsMiB + kv.gpuMiB + overhead + draftMiB;
+  return gpuLayers > 0 ? preMargin + Math.max(384, preMargin * 0.04) : 0;
+}
+
+// Invert the estimator: find the largest gpu-layer count whose estimated VRAM
+// fits the currently free VRAM (with a small extra reserve). VRAM is monotonic
+// in the layer count, so a top-down scan finds the answer in <= blocks+2 steps.
+function recommendGpuLayers(
+  profile: LlamaProfile,
+  metadata: ModelMetadata,
+  layout: GgufTensorLayout | null,
+  backend: ResolvedBackend,
+  availableVramMiB: number | null,
+  draftMiB: number
+) {
+  if (backend !== "CUDA" || !availableVramMiB || availableVramMiB <= 0) {
+    return null;
+  }
+  const blockCount = metadata.blockCount ?? layout?.layers.length ?? 0;
+  if (blockCount <= 0 || metadata.fileSizeMiB <= 0) {
+    return null;
+  }
+  const maxNgl = blockCount + 1; // blocks + output layer
+  const budget = availableVramMiB - 128;
+
+  for (let ngl = maxNgl; ngl >= 0; ngl -= 1) {
+    const vram = vramForGpuLayers(profile, metadata, layout, ngl, draftMiB);
+    if (vram > budget) {
+      continue;
+    }
+    const effectiveCurrent = Math.min(Math.max(0, profile.gpuLayers), maxNgl);
+    if (ngl === effectiveCurrent) {
+      return null; // already optimal
+    }
+    return {
+      gpuLayers: ngl,
+      estimatedVramMiB: roundMiB(vram),
+      vramHeadroomMiB: roundSignedMiB(availableVramMiB - vram),
+      fullOffload: ngl >= maxNgl
+    };
+  }
+  return null;
+}
+
 function fitStatus(estimatedVramMiB: number, availableVramMiB: number | null, totalVramMiB: number | null) {
   const capacity = availableVramMiB ?? totalVramMiB;
   if (!capacity) {
@@ -504,9 +559,11 @@ export async function estimateProfileMemory(
   const totalVramMiB = primaryGpu?.totalMiB ?? null;
   const metadataComplete = Boolean(metadata.blockCount && metadata.embeddingLength && metadata.headCount);
   const confidence = plan.fromTensorLayout && metadataComplete ? "high" : metadataComplete ? "medium" : "low";
+  const recommendation = recommendGpuLayers(profile, metadata, layout, backend, availableVramMiB, draftMiB);
 
   return {
     backend,
+    recommendation,
     fit: fitStatus(estimatedVramMiB, availableVramMiB, totalVramMiB),
     confidence,
     totalVramMiB,

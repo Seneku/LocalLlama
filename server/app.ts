@@ -9,6 +9,7 @@ import { buildCommand } from "./llama";
 import { createProfileStore, type ProfileStore } from "./profileStore";
 import { createRuntimeConfig } from "./paths";
 import { RuntimeManager } from "./runtime";
+import { getSettings, saveSettings } from "./settings";
 import { normalizeProfile } from "./normalize";
 import type { BenchmarkSettings } from "../src/shared/types";
 
@@ -93,6 +94,17 @@ async function routeApi(
 ): Promise<void> {
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, createRuntimeConfig(fs.existsSync));
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/settings") {
+    sendJson(response, 200, { settings: getSettings(), config: createRuntimeConfig(fs.existsSync) });
+    return;
+  }
+
+  if (request.method === "PUT" && pathname === "/api/settings") {
+    const settings = saveSettings(await readJson<unknown>(request));
+    sendJson(response, 200, { settings, config: createRuntimeConfig(fs.existsSync) });
     return;
   }
 
