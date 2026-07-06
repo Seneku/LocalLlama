@@ -202,6 +202,21 @@ export interface ModelMetadata {
   headCountKv: number | null;
   keyLength: number | null;
   valueLength: number | null;
+  /** Sliding-window attention: window size in tokens (e.g. Gemma-family). */
+  slidingWindow: number | null;
+  /** Every Nth layer is full-attention when interleaved SWA is used. */
+  slidingWindowPattern: number | null;
+  /** SWA layers can use smaller K/V head dims than full-attention layers. */
+  keyLengthSwa: number | null;
+  valueLengthSwa: number | null;
+  /** Hybrid SSM models: every Nth layer is attention, the rest are recurrent. */
+  fullAttentionInterval: number | null;
+  ssmStateSize: number | null;
+  ssmInnerSize: number | null;
+  ssmConvKernel: number | null;
+  ssmGroupCount: number | null;
+  /** Extra MTP/next-token-prediction layers appended to the model. */
+  nextnPredictLayers: number | null;
 }
 
 export interface MemoryEstimateBreakdown {

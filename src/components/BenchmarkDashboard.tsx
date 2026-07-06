@@ -121,11 +121,12 @@ export function BenchmarkDashboard({
     [compareIds, runs]
   );
 
-  // Poll faster while a benchmark runs, back off when idle, skip hidden tabs.
+  // Poll faster while a benchmark runs, back off when idle, skip hidden tabs
+  // (but always load once, and refresh immediately when the tab is shown).
   useEffect(() => {
     let disposed = false;
-    const refresh = async () => {
-      if (document.hidden) {
+    const refresh = async (force = false) => {
+      if (document.hidden && !force) {
         return;
       }
       try {
@@ -148,11 +149,18 @@ export function BenchmarkDashboard({
         // Polling stays quiet; direct actions surface their own errors.
       }
     };
-    void refresh();
+    void refresh(true);
     const timer = window.setInterval(() => void refresh(), running ? 1500 : 5000);
+    const onVisible = () => {
+      if (!document.hidden) {
+        void refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [running]);
 

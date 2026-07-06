@@ -9,13 +9,76 @@ const MAX_READ_BYTES = 64 * 1024 * 1024;
 
 type MetadataValue = string | number | boolean | Array<string | number | boolean> | null;
 
+export interface GgufLayerInfo {
+  index: number;
+  /** Total weight bytes of all tensors in this block. */
+  bytes: number;
+  /** Output rows of blk.N.attn_k.weight — elements stored per token in the K cache. */
+  attnKElements: number | null;
+  attnVElements: number | null;
+  /** True when the block contains SSM/recurrent tensors instead of attention. */
+  recurrent: boolean;
+}
+
+export interface GgufTensorLayout {
+  /** Blocks indexed 0..N, including trailing MTP/nextn blocks past block_count. */
+  layers: GgufLayerInfo[];
+  tokenEmbdBytes: number;
+  outputBytes: number;
+  otherBytes: number;
+  totalBytes: number;
+  /** True when every tensor type was recognised; false means bytes are approximate. */
+  exact: boolean;
+}
+
+export interface GgufModelInfo {
+  metadata: ModelMetadata;
+  layout: GgufTensorLayout | null;
+}
+
 interface CacheEntry {
   mtimeMs: number;
   size: number;
-  metadata: ModelMetadata;
+  info: GgufModelInfo;
 }
 
 const metadataCache = new Map<string, CacheEntry>();
+
+// GGML tensor type -> [bytes per block, elements per block].
+const GGML_TYPE_SIZES: Record<number, [number, number]> = {
+  0: [4, 1], // F32
+  1: [2, 1], // F16
+  2: [18, 32], // Q4_0
+  3: [20, 32], // Q4_1
+  6: [22, 32], // Q5_0
+  7: [24, 32], // Q5_1
+  8: [34, 32], // Q8_0
+  9: [36, 32], // Q8_1
+  10: [84, 256], // Q2_K
+  11: [110, 256], // Q3_K
+  12: [144, 256], // Q4_K
+  13: [176, 256], // Q5_K
+  14: [210, 256], // Q6_K
+  15: [292, 256], // Q8_K
+  16: [66, 256], // IQ2_XXS
+  17: [74, 256], // IQ2_XS
+  18: [98, 256], // IQ3_XXS
+  19: [50, 256], // IQ1_S
+  20: [18, 32], // IQ4_NL
+  21: [110, 256], // IQ3_S
+  22: [82, 256], // IQ2_S
+  23: [136, 256], // IQ4_XS
+  24: [1, 1], // I8
+  25: [2, 1], // I16
+  26: [4, 1], // I32
+  27: [8, 1], // I64
+  28: [8, 1], // F64
+  29: [56, 256], // IQ1_M
+  30: [2, 1] // BF16
+};
+
+// Unknown/exotic quant types fall back to ~4.5 bits per weight.
+const FALLBACK_BYTES_PER_ELEMENT = 0.5625;
 
 // Signals that the current header window was exhausted and needs to grow.
 class WindowOverflowError extends Error {
@@ -233,7 +296,78 @@ function stringMeta(metadata: Map<string, MetadataValue>, key: string): string |
   return typeof value === "string" ? value : null;
 }
 
-function parseHeader(buffer: Buffer, fileSizeBytes: number): ModelMetadata {
+function tensorBytes(elements: number, type: number): { bytes: number; exact: boolean } {
+  const size = GGML_TYPE_SIZES[type];
+  if (!size) {
+    return { bytes: elements * FALLBACK_BYTES_PER_ELEMENT, exact: false };
+  }
+  const [blockBytes, blockElements] = size;
+  return { bytes: Math.ceil(elements / blockElements) * blockBytes, exact: true };
+}
+
+function parseTensorLayout(reader: BufferReader, tensorCount: number): GgufTensorLayout {
+  const layers = new Map<number, GgufLayerInfo>();
+  const layout: GgufTensorLayout = {
+    layers: [],
+    tokenEmbdBytes: 0,
+    outputBytes: 0,
+    otherBytes: 0,
+    totalBytes: 0,
+    exact: true
+  };
+
+  for (let index = 0; index < tensorCount; index += 1) {
+    const name = reader.ggufString();
+    const dimCount = reader.u32();
+    if (dimCount > 8) {
+      throw new Error("GGUF tensor declares an implausible dimension count");
+    }
+    const dims: number[] = [];
+    for (let dim = 0; dim < dimCount; dim += 1) {
+      dims.push(reader.u64());
+    }
+    const elements = dims.reduce((product, value) => product * value, 1);
+    const type = reader.u32();
+    reader.u64(); // data offset
+
+    const { bytes, exact } = tensorBytes(elements, type);
+    layout.exact = layout.exact && exact;
+    layout.totalBytes += bytes;
+
+    const blockMatch = /^blk\.(\d+)\.(.+)$/.exec(name);
+    if (blockMatch) {
+      const blockIndex = Number(blockMatch[1]);
+      const tensorName = blockMatch[2];
+      let layer = layers.get(blockIndex);
+      if (!layer) {
+        layer = { index: blockIndex, bytes: 0, attnKElements: null, attnVElements: null, recurrent: false };
+        layers.set(blockIndex, layer);
+      }
+      layer.bytes += bytes;
+      if (tensorName === "attn_k.weight") {
+        // ne[1] = output rows = elements stored per token in the K cache.
+        layer.attnKElements = dims[1] ?? null;
+      }
+      if (tensorName === "attn_v.weight") {
+        layer.attnVElements = dims[1] ?? null;
+      }
+      if (tensorName.startsWith("ssm_")) {
+        layer.recurrent = true;
+      }
+    } else if (name === "token_embd.weight") {
+      layout.tokenEmbdBytes += bytes;
+    } else if (name === "output.weight") {
+      layout.outputBytes += bytes;
+    } else {
+      layout.otherBytes += bytes;
+    }
+  }
+
+  layout.layers = [...layers.values()].sort((a, b) => a.index - b.index);
+  return layout;
+}
+
+function parseFile(buffer: Buffer, fileSizeBytes: number): GgufModelInfo {
   const reader = new BufferReader(buffer);
   const magic = reader.string(4);
   if (magic !== GGUF_MAGIC) {
@@ -241,7 +375,8 @@ function parseHeader(buffer: Buffer, fileSizeBytes: number): ModelMetadata {
   }
 
   reader.u32();
-  reader.u64();
+  const tensorCount = reader.u64();
+  reader.checkLength(tensorCount);
   const metadataCount = reader.u64();
   reader.checkLength(metadataCount);
   const metadata = new Map<string, MetadataValue>();
@@ -255,7 +390,7 @@ function parseHeader(buffer: Buffer, fileSizeBytes: number): ModelMetadata {
   const architecture = stringMeta(metadata, "general.architecture");
   const prefix = architecture ? `${architecture}.` : "";
 
-  return {
+  const model: ModelMetadata = {
     architecture,
     name: stringMeta(metadata, "general.name"),
     parameterSize: stringMeta(metadata, "general.size_label"),
@@ -267,8 +402,33 @@ function parseHeader(buffer: Buffer, fileSizeBytes: number): ModelMetadata {
     headCount: numberMeta(metadata, `${prefix}attention.head_count`),
     headCountKv: numberMeta(metadata, `${prefix}attention.head_count_kv`),
     keyLength: numberMeta(metadata, `${prefix}attention.key_length`),
-    valueLength: numberMeta(metadata, `${prefix}attention.value_length`)
+    valueLength: numberMeta(metadata, `${prefix}attention.value_length`),
+    slidingWindow: numberMeta(metadata, `${prefix}attention.sliding_window`),
+    slidingWindowPattern: numberMeta(metadata, `${prefix}attention.sliding_window_pattern`),
+    keyLengthSwa: numberMeta(metadata, `${prefix}attention.key_length_swa`),
+    valueLengthSwa: numberMeta(metadata, `${prefix}attention.value_length_swa`),
+    fullAttentionInterval: numberMeta(metadata, `${prefix}full_attention_interval`),
+    ssmStateSize: numberMeta(metadata, `${prefix}ssm.state_size`),
+    ssmInnerSize: numberMeta(metadata, `${prefix}ssm.inner_size`),
+    ssmConvKernel: numberMeta(metadata, `${prefix}ssm.conv_kernel`),
+    ssmGroupCount: numberMeta(metadata, `${prefix}ssm.group_count`),
+    nextnPredictLayers: numberMeta(metadata, `${prefix}nextn_predict_layers`)
   };
+
+  // Tensor infos follow the metadata section. A window overflow must propagate
+  // so the caller grows the read window; any other layout failure degrades to
+  // metadata-only (the estimator falls back to metadata heuristics).
+  let layout: GgufTensorLayout | null = null;
+  try {
+    layout = parseTensorLayout(reader, tensorCount);
+  } catch (error) {
+    if (error instanceof WindowOverflowError) {
+      throw error;
+    }
+    layout = null;
+  }
+
+  return { metadata: model, layout };
 }
 
 async function readWindow(file: FileHandle, size: number): Promise<Buffer> {
@@ -277,29 +437,29 @@ async function readWindow(file: FileHandle, size: number): Promise<Buffer> {
   return buffer;
 }
 
-export async function readGgufMetadata(modelPath: string): Promise<ModelMetadata> {
+export async function readGgufModelInfo(modelPath: string): Promise<GgufModelInfo> {
   const fileStat = await stat(modelPath);
   const cached = metadataCache.get(modelPath);
   if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
-    return cached.metadata;
+    return cached.info;
   }
 
   const file = await open(modelPath, "r");
   try {
-    // Read an initial small window and grow it (doubling, up to the old 64 MiB
+    // Read an initial small window and grow it (doubling, up to the 64 MiB
     // cap) only if the header genuinely overflows the current window.
     let windowSize = Math.min(INITIAL_READ_BYTES, fileStat.size);
     let buffer = await readWindow(file, windowSize);
 
     for (;;) {
       try {
-        const metadata = parseHeader(buffer, fileStat.size);
+        const info = parseFile(buffer, fileStat.size);
         metadataCache.set(modelPath, {
           mtimeMs: fileStat.mtimeMs,
           size: fileStat.size,
-          metadata
+          info
         });
-        return metadata;
+        return info;
       } catch (error) {
         if (!(error instanceof WindowOverflowError)) {
           throw error;
@@ -314,4 +474,8 @@ export async function readGgufMetadata(modelPath: string): Promise<ModelMetadata
   } finally {
     await file.close();
   }
+}
+
+export async function readGgufMetadata(modelPath: string): Promise<ModelMetadata> {
+  return (await readGgufModelInfo(modelPath)).metadata;
 }

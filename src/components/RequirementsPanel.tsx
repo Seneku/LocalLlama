@@ -175,10 +175,24 @@ export function RequirementsPanel({ profile, onMessage }: RequirementsPanelProps
         </div>
       ) : null}
 
-      <div className="estimate-note">
-        <Info size={13} />
-        <span>Estimate includes model weights, KV cache, runtime overhead, and a safety buffer.</span>
-      </div>
+      {estimate?.assumptions.length ? (
+        <details className="estimate-assumptions">
+          <summary>
+            <Info size={13} />
+            <span>How this was estimated</span>
+          </summary>
+          <ul>
+            {estimate.assumptions.map((assumption) => (
+              <li key={assumption}>{assumption}</li>
+            ))}
+          </ul>
+        </details>
+      ) : (
+        <div className="estimate-note">
+          <Info size={13} />
+          <span>Estimate includes model weights, KV cache, runtime overhead, and a safety buffer.</span>
+        </div>
+      )}
 
       {estimate?.warnings.length ? (
         <div className="requirement-warnings">

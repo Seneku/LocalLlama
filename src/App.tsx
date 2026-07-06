@@ -132,11 +132,12 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [draft, notify]);
 
-  // Poll faster while the server is active, back off when idle, skip hidden tabs.
+  // Poll faster while the server is active, back off when idle, skip hidden
+  // tabs (but always load once, and refresh immediately when the tab is shown).
   useEffect(() => {
     let disposed = false;
-    const refresh = () => {
-      if (document.hidden) {
+    const refresh = (force = false) => {
+      if (document.hidden && !force) {
         return;
       }
       api
@@ -158,11 +159,18 @@ export default function App() {
         })
         .catch(() => undefined);
     };
-    refresh();
-    const timer = window.setInterval(refresh, running ? 1200 : 4000);
+    refresh(true);
+    const timer = window.setInterval(() => refresh(), running ? 1200 : 4000);
+    const onVisible = () => {
+      if (!document.hidden) {
+        refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [running]);
 

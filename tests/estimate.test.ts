@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { estimateProfileMemory } from "../server/estimate";
 import { defaultProfiles } from "../server/defaultProfiles";
-import type { HardwareInfo, ModelMetadata } from "../src/shared/types";
+import type { GgufTensorLayout } from "../server/gguf";
+import type { HardwareInfo, LlamaProfile, ModelMetadata } from "../src/shared/types";
 
 const hardware: HardwareInfo = {
   totalRamMiB: 65536,
@@ -17,13 +18,40 @@ const hardware: HardwareInfo = {
   ]
 };
 
-const metadata: ModelMetadata = {
-  architecture: "qwen35",
-  name: "Orinth test",
-  parameterSize: "9B",
+const emptyMetadata: ModelMetadata = {
+  architecture: null,
+  name: null,
+  parameterSize: null,
+  fileType: null,
+  fileSizeMiB: 0,
+  blockCount: null,
+  contextLength: null,
+  embeddingLength: null,
+  headCount: null,
+  headCountKv: null,
+  keyLength: null,
+  valueLength: null,
+  slidingWindow: null,
+  slidingWindowPattern: null,
+  keyLengthSwa: null,
+  valueLengthSwa: null,
+  fullAttentionInterval: null,
+  ssmStateSize: null,
+  ssmInnerSize: null,
+  ssmConvKernel: null,
+  ssmGroupCount: null,
+  nextnPredictLayers: null
+};
+
+// Plain GQA transformer (llama-3-8B-like geometry).
+const denseMetadata: ModelMetadata = {
+  ...emptyMetadata,
+  architecture: "llama",
+  name: "Dense test",
+  parameterSize: "8B",
   fileType: 15,
-  fileSizeMiB: 5800,
-  blockCount: 36,
+  fileSizeMiB: 4800,
+  blockCount: 32,
   contextLength: 32768,
   embeddingLength: 4096,
   headCount: 32,
@@ -32,32 +60,159 @@ const metadata: ModelMetadata = {
   valueLength: 128
 };
 
+// Gemma4-like: interleaved SWA (distinct tensor shapes), MQA full layers,
+// tied embeddings (no output.weight tensor).
+const MIB = 1024 * 1024;
+
+function gemmaLayout(): GgufTensorLayout {
+  const layers = Array.from({ length: 48 }, (_, index) => ({
+    index,
+    bytes: 130 * MIB,
+    // Every 6th layer (5, 11, ...) is full attention: 1 KV head x 512 dims.
+    // SWA layers: 8 KV heads x 256 dims.
+    attnKElements: (index + 1) % 6 === 0 ? 512 : 2048,
+    attnVElements: (index + 1) % 6 === 0 ? 512 : 2048,
+    recurrent: false
+  }));
+  return {
+    layers,
+    tokenEmbdBytes: 780 * MIB,
+    outputBytes: 0,
+    otherBytes: 4 * MIB,
+    totalBytes: layers.length * 130 * MIB + 784 * MIB,
+    exact: true
+  };
+}
+
+const gemmaMetadata: ModelMetadata = {
+  ...emptyMetadata,
+  architecture: "gemma4",
+  name: "Gemma4 test",
+  parameterSize: "12B",
+  fileType: 15,
+  fileSizeMiB: 7024,
+  blockCount: 48,
+  contextLength: 131072,
+  embeddingLength: 3840,
+  headCount: 16,
+  headCountKv: null,
+  keyLength: 512,
+  valueLength: 512,
+  slidingWindow: 1024,
+  keyLengthSwa: 256,
+  valueLengthSwa: 256
+};
+
+// Qwen35-like hybrid: 8 attention layers, 24 recurrent SSM layers, 1 MTP block.
+function hybridLayout(): GgufTensorLayout {
+  const layers = Array.from({ length: 33 }, (_, index) => {
+    const attention = (index + 1) % 4 === 0 || index === 32;
+    return {
+      index,
+      bytes: 146 * MIB,
+      attnKElements: attention ? 1024 : null,
+      attnVElements: attention ? 1024 : null,
+      recurrent: !attention
+    };
+  });
+  return {
+    layers,
+    tokenEmbdBytes: 346 * MIB,
+    outputBytes: 340 * MIB,
+    otherBytes: 8 * MIB,
+    totalBytes: layers.length * 146 * MIB + 694 * MIB,
+    exact: true
+  };
+}
+
+const hybridMetadata: ModelMetadata = {
+  ...emptyMetadata,
+  architecture: "qwen35",
+  name: "Ornith test",
+  parameterSize: "9B",
+  fileType: 15,
+  fileSizeMiB: 5512,
+  blockCount: 33,
+  contextLength: 262144,
+  embeddingLength: 4096,
+  headCount: 16,
+  headCountKv: 4,
+  keyLength: 256,
+  valueLength: 256,
+  fullAttentionInterval: 4,
+  ssmStateSize: 128,
+  ssmInnerSize: 4096,
+  ssmConvKernel: 4,
+  ssmGroupCount: 16,
+  nextnPredictLayers: 1
+};
+
+function makeProfile(overrides: Partial<LlamaProfile>): LlamaProfile {
+  return {
+    ...defaultProfiles[0],
+    id: "test",
+    name: "test",
+    ...overrides
+  };
+}
+
 describe("memory estimates", () => {
-  test("estimates CUDA model, KV cache, and headroom", async () => {
-    const profile = defaultProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
+  test("estimates CUDA model, KV cache, and headroom for a dense GQA model", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 32768, parallelSlots: 1 });
     const estimate = await estimateProfileMemory(profile, {
       hardware,
-      metadata,
+      metadata: denseMetadata,
       fileExists: () => true
     });
 
     expect(estimate.backend).toBe("CUDA");
-    expect(estimate.breakdown.gpuModelWeightsMiB).toBe(5800);
-    expect(estimate.breakdown.kvCacheMiB).toBeGreaterThan(2000);
-    expect(estimate.estimatedVramMiB).toBeGreaterThan(8000);
+    // ~90% of the file offloads (metadata fallback keeps embeddings host-side).
+    expect(estimate.breakdown.gpuModelWeightsMiB).toBeGreaterThan(4000);
+    // 32 layers x 32768 tokens x 8 heads x 128 dims x 2 (K+V) x 2 bytes = 4096 MiB
+    expect(estimate.breakdown.kvCacheMiB).toBeGreaterThan(3900);
+    expect(estimate.breakdown.kvCacheMiB).toBeLessThan(4300);
     expect(estimate.vramHeadroomMiB).not.toBeNull();
     expect(estimate.assumptions.some((item) => item.includes("full model offload"))).toBe(true);
   });
 
-  test("keeps CPU profiles mostly out of VRAM", async () => {
-    const profile = {
-      ...defaultProfiles[0],
-      backendMode: "cpu" as const,
-      gpuLayers: 0
-    };
+  test("sliding-window attention caps SWA layer KV at the window size", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 12288, parallelSlots: 1 });
     const estimate = await estimateProfileMemory(profile, {
       hardware,
-      metadata,
+      metadata: gemmaMetadata,
+      layout: gemmaLayout(),
+      fileExists: () => true
+    });
+
+    // Measured on real hardware: 192 MiB full-attention + 360 MiB SWA = 552 MiB.
+    expect(estimate.breakdown.kvCacheMiB).toBeGreaterThan(500);
+    expect(estimate.breakdown.kvCacheMiB).toBeLessThan(620);
+    expect(estimate.confidence).toBe("high");
+    expect(estimate.assumptions.some((item) => item.includes("Sliding-window"))).toBe(true);
+    // Tied embeddings: offloaded output head duplicates token_embd on GPU.
+    expect(estimate.breakdown.gpuModelWeightsMiB).toBeGreaterThan(6900);
+  });
+
+  test("hybrid SSM models only cache KV on attention layers", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 32768, parallelSlots: 4 });
+    const estimate = await estimateProfileMemory(profile, {
+      hardware,
+      metadata: hybridMetadata,
+      layout: hybridLayout(),
+      fileExists: () => true
+    });
+
+    // Measured on real hardware: 1024 MiB KV (8 layers) + ~200 MiB SSM state.
+    expect(estimate.breakdown.kvCacheMiB).toBeGreaterThan(1150);
+    expect(estimate.breakdown.kvCacheMiB).toBeLessThan(1350);
+    expect(estimate.assumptions.some((item) => item.includes("Hybrid"))).toBe(true);
+  });
+
+  test("keeps CPU profiles mostly out of VRAM", async () => {
+    const profile = makeProfile({ backendMode: "cpu", gpuLayers: 0 });
+    const estimate = await estimateProfileMemory(profile, {
+      hardware,
+      metadata: denseMetadata,
       fileExists: () => true
     });
 
