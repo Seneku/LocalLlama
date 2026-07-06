@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { buildCommand, validateProfileForLaunch } from "./llama";
+import { getRuntimePaths } from "./paths";
 import type { CommandPreview, LlamaProfile, RuntimeLog, RuntimeStatus } from "../src/shared/types";
 
 const MAX_LOGS = 800;
@@ -84,7 +85,9 @@ export class RuntimeManager {
     this.appendLog("system", `Starting ${profile.name}`);
     this.appendLog("system", command.display);
     this.process = spawn(command.executable, command.args, {
-      cwd: process.env.LLAMATUNER_LLAMA_ROOT ?? "E:\\Projects\\llama.cpp",
+      // Resolve through settings/env/default so the Settings page also moves the
+      // working directory (llama.cpp resolves relative asset paths against it).
+      cwd: getRuntimePaths().llamaRoot,
       shell: false,
       windowsHide: true
     });

@@ -6,29 +6,24 @@ import {
   defaultBenchmarkSettings,
   parseBenchmarkRows
 } from "../server/benchmark";
-import { defaultProfiles } from "../server/defaultProfiles";
+import { exampleProfiles } from "../server/defaultProfiles";
 import type { RuntimePaths } from "../server/paths";
 
 const paths: RuntimePaths = {
-  llamaRoot: "E:\\Projects\\llama.cpp",
-  cudaServerPath: "E:\\Projects\\llama.cpp\\dist-cuda\\llama-server.exe",
-  cpuServerPath: "E:\\Projects\\llama.cpp\\build\\bin\\llama-server.exe",
-  cudaBenchPath: "E:\\Projects\\llama.cpp\\dist-cuda\\llama-bench.exe",
-  cpuBenchPath: "E:\\Projects\\llama.cpp\\build\\bin\\llama-bench.exe",
-  dataPath: "D:\\Projects\\Tools\\LlamaTuner\\data"
+  llamaRoot: "C:\\llama.cpp",
+  cudaServerPath: "C:\\llama.cpp\\dist-cuda\\llama-server.exe",
+  cpuServerPath: "C:\\llama.cpp\\build\\bin\\llama-server.exe",
+  cudaBenchPath: "C:\\llama.cpp\\dist-cuda\\llama-bench.exe",
+  cpuBenchPath: "C:\\llama.cpp\\build\\bin\\llama-bench.exe",
+  dataPath: "C:\\LlamaTuner\\data"
 };
 
 const exists = (filePath: string) =>
-  [
-    paths.cudaBenchPath,
-    paths.cpuBenchPath,
-    "E:\\Models\\Gemma4-GGUF\\gemma-4-12B-it-Q4_K_M.gguf",
-    "E:\\Models\\Orinth\\ornith-9b-mtp-kl-Q4_K_M.gguf"
-  ].includes(filePath);
+  [paths.cudaBenchPath, paths.cpuBenchPath, ...exampleProfiles.map((profile) => profile.modelPath)].includes(filePath);
 
 describe("benchmark command generation", () => {
   test("uses profile backend, model, threads, cache, and GPU settings", () => {
-    const profile = defaultProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
+    const profile = exampleProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
     const preview = buildBenchmarkCommand(profile, defaultBenchmarkSettings, {
       paths,
       defaultThreads: 16,
@@ -48,7 +43,7 @@ describe("benchmark command generation", () => {
   });
 
   test("falls back to CPU benchmark when CUDA bench is missing", () => {
-    const profile = defaultProfiles[0];
+    const profile = exampleProfiles[0];
     const preview = buildBenchmarkCommand(profile, defaultBenchmarkSettings, {
       paths,
       defaultThreads: 8,

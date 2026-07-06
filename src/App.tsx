@@ -3,6 +3,7 @@ import {
   Copy,
   Cpu,
   Database,
+  FolderCog,
   Play,
   Plus,
   RefreshCw,
@@ -375,6 +376,23 @@ export default function App() {
         onConfigChanged={setConfig}
         notify={notify}
       />
+
+      {config && !config.detected.cudaServer && !config.detected.cpuServer ? (
+        <div className="onboarding">
+          <FolderCog size={20} />
+          <div>
+            <strong>llama.cpp not found</strong>
+            <span>
+              No <code>llama-server</code> was detected under <code>{config.llamaRoot}</code>. Point LlamaTuner at
+              your build to start launching and benchmarking.
+            </span>
+          </div>
+          <button className="primary" onClick={() => setSettingsOpen(true)}>
+            <FolderCog size={16} />
+            Open Settings
+          </button>
+        </div>
+      ) : null}
 
       <section className="workspace">
         <aside className="profiles-panel">

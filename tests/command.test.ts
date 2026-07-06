@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { defaultProfiles } from "../server/defaultProfiles";
+import { exampleProfiles } from "../server/defaultProfiles";
 import { buildCommand } from "../server/llama";
 import type { RuntimePaths } from "../server/paths";
 
 const paths: RuntimePaths = {
-  llamaRoot: "E:\\Projects\\llama.cpp",
-  cudaServerPath: "E:\\Projects\\llama.cpp\\dist-cuda\\llama-server.exe",
-  cpuServerPath: "E:\\Projects\\llama.cpp\\build\\bin\\llama-server.exe",
-  cudaBenchPath: "E:\\Projects\\llama.cpp\\dist-cuda\\llama-bench.exe",
-  cpuBenchPath: "E:\\Projects\\llama.cpp\\build\\bin\\llama-bench.exe",
-  dataPath: "D:\\Projects\\Tools\\LlamaTuner\\data"
+  llamaRoot: "C:\\llama.cpp",
+  cudaServerPath: "C:\\llama.cpp\\dist-cuda\\llama-server.exe",
+  cpuServerPath: "C:\\llama.cpp\\build\\bin\\llama-server.exe",
+  cudaBenchPath: "C:\\llama.cpp\\dist-cuda\\llama-bench.exe",
+  cpuBenchPath: "C:\\llama.cpp\\build\\bin\\llama-bench.exe",
+  dataPath: "C:\\LlamaTuner\\data"
 };
 
 const exists = (filePath: string) =>
@@ -19,13 +19,12 @@ const exists = (filePath: string) =>
     paths.cpuServerPath,
     paths.cudaBenchPath,
     paths.cpuBenchPath,
-    "E:\\Models\\Gemma4-GGUF\\gemma-4-12B-it-Q4_K_M.gguf",
-    "E:\\Models\\Orinth\\ornith-9b-mtp-kl-Q4_K_M.gguf"
+    ...exampleProfiles.map((profile) => profile.modelPath)
   ].includes(filePath);
 
 describe("buildCommand", () => {
   test("generates the Gemma4 CUDA coding command", () => {
-    const profile = defaultProfiles.find((item) => item.id === "gemma4-coding")!;
+    const profile = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
     const preview = buildCommand(profile, { paths, defaultThreads: 12, fileExists: exists });
 
     expect(preview.backend).toBe("CUDA");
@@ -38,7 +37,7 @@ describe("buildCommand", () => {
   });
 
   test("falls back to CPU without GPU layer args", () => {
-    const profile = defaultProfiles.find((item) => item.id === "gemma4-general")!;
+    const profile = exampleProfiles.find((item) => item.id === "gemma4-general")!;
     const preview = buildCommand(profile, {
       paths,
       defaultThreads: 8,
@@ -52,7 +51,7 @@ describe("buildCommand", () => {
   });
 
   test("generates the Orinth bundled MTP command", () => {
-    const profile = defaultProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
+    const profile = exampleProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
     const preview = buildCommand(profile, { paths, defaultThreads: 16, fileExists: exists });
 
     expect(preview.args).toContain("--jinja");
@@ -67,7 +66,7 @@ describe("buildCommand", () => {
 
   test("uses manual overrides for custom tuning", () => {
     const profile = {
-      ...defaultProfiles[0],
+      ...exampleProfiles[0],
       host: "0.0.0.0",
       port: 8099,
       contextSize: 65536,

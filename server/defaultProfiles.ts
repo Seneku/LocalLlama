@@ -1,15 +1,12 @@
 import type { LlamaProfile } from "../src/shared/types";
 
-const GEMMA_MODEL = "E:\\Models\\Gemma4-GGUF\\gemma-4-12B-it-Q4_K_M.gguf";
-const ORINTH_MTP_MODEL = "E:\\Models\\Orinth\\ornith-9b-mtp-kl-Q4_K_M.gguf";
-
 const baseProfile = {
   host: "127.0.0.1",
   port: 8080,
   threadsMode: "auto",
   threads: 0,
   jinja: false,
-  mlock: true,
+  mlock: false,
   parallelSlots: 1,
   kvCacheK: "",
   kvCacheV: "",
@@ -22,43 +19,66 @@ const baseProfile = {
   }
 } satisfies Partial<LlamaProfile>;
 
+// Seeded once for a brand-new install. Intentionally neutral: no model path,
+// so the app opens on an empty starter that nudges the user to set their model
+// (and, if llama.cpp isn't detected, to open Settings first).
 export const defaultProfiles: LlamaProfile[] = [
+  {
+    ...baseProfile,
+    id: "starter",
+    name: "Starter",
+    description: "Set a model path above to get going. If llama.cpp isn't detected, open Settings first.",
+    modelPath: "",
+    modelAlias: "",
+    backendMode: "auto",
+    contextSize: 8192,
+    gpuLayers: 999,
+    reasoning: "off"
+  }
+];
+
+// Illustrative configurations used as references and in tests. These are not
+// seeded into a user's data; the model paths are placeholders.
+export const exampleProfiles: LlamaProfile[] = [
   {
     ...baseProfile,
     id: "gemma4-coding",
     name: "Gemma4 Coding",
-    description: "Gemma 4 12B coding assistant defaults from start-coding-assistant.cmd.",
-    modelPath: GEMMA_MODEL,
+    description: "12B coding assistant: full offload, 12k context, reasoning off.",
+    modelPath: "C:\\models\\gemma-4-12b-it-Q4_K_M.gguf",
     modelAlias: "",
     backendMode: "auto",
     contextSize: 12288,
     gpuLayers: 999,
-    reasoning: "off"
+    reasoning: "off",
+    mlock: true
   },
   {
     ...baseProfile,
     id: "gemma4-general",
     name: "Gemma4 General",
-    description: "Gemma 4 12B general chat / agent defaults from start-general-agent.cmd.",
-    modelPath: GEMMA_MODEL,
+    description: "12B general chat / agent: full offload, 12k context, reasoning auto.",
+    modelPath: "C:\\models\\gemma-4-12b-it-Q4_K_M.gguf",
     modelAlias: "",
     backendMode: "auto",
     contextSize: 12288,
     gpuLayers: 999,
-    reasoning: "auto"
+    reasoning: "auto",
+    mlock: true
   },
   {
     ...baseProfile,
     id: "orinth9b-mtp-coding",
     name: "Orinth9B MTP Coding",
-    description: "Orinth 9B MTP coding assistant defaults with 32k context and q8 KV cache.",
-    modelPath: ORINTH_MTP_MODEL,
+    description: "9B hybrid-SSM coding model: 32k context, q8 KV cache, bundled MTP speculative.",
+    modelPath: "C:\\models\\ornith-9b-mtp-Q4_K_M.gguf",
     modelAlias: "",
     backendMode: "auto",
     contextSize: 32768,
     gpuLayers: 99,
     reasoning: "off",
     jinja: true,
+    mlock: true,
     kvCacheK: "q8_0",
     kvCacheV: "q8_0",
     speculative: {

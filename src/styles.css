@@ -361,6 +361,62 @@ h1 {
   }
 }
 
+/* ---------- Onboarding banner ---------- */
+
+.onboarding {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 24px 0;
+  border: 1px solid var(--amber-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: var(--amber-bg);
+}
+
+.onboarding > svg {
+  flex: none;
+  color: var(--amber);
+}
+
+.onboarding > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.onboarding strong {
+  color: #ffe6b0;
+  font-size: var(--font-md);
+}
+
+.onboarding span {
+  color: var(--text-dim);
+  font-size: var(--font-md);
+}
+
+.onboarding code {
+  font-family: var(--mono);
+  font-size: var(--font-sm);
+  color: var(--amber);
+}
+
+.onboarding button {
+  flex: none;
+  margin-left: auto;
+}
+
+@media (max-width: 780px) {
+  .onboarding {
+    flex-wrap: wrap;
+    margin: 16px;
+  }
+
+  .onboarding button {
+    margin-left: 0;
+  }
+}
+
 /* ---------- Workspace panels ---------- */
 
 .workspace {
