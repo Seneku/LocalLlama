@@ -133,6 +133,7 @@ export function ServerView({
           revertDraft={revertDraft}
           deleteSelected={deleteSelected}
           onDuplicate={onDuplicateProfile}
+          notify={notify}
         />
 
         <aside className="runtime-panel">

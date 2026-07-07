@@ -28,6 +28,7 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +64,20 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
 
   function update<K extends keyof AppSettings>(key: K, value: string) {
     setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  async function browse(key: keyof AppSettings, mode: "folder" | "file", title: string) {
+    setPicking(true);
+    try {
+      const { path } = await api.pickPath(mode, { title });
+      if (path) {
+        update(key, path);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setPicking(false);
+    }
   }
 
   async function save() {
@@ -114,7 +129,9 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
                 label="llama.cpp root"
                 value={settings.llamaRoot}
                 wide
-                placeholder={config?.llamaRoot ?? "E:\\Projects\\llama.cpp"}
+                placeholder={config?.llamaRoot ?? ""}
+                onBrowse={() => browse("llamaRoot", "folder", "Select your llama.cpp folder")}
+                browseBusy={picking}
                 onChange={(value) => update("llamaRoot", value)}
               />
               {binaries.map(({ key, label, resolved, detected }) => (
@@ -124,6 +141,8 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
                     value={settings[key]}
                     wide
                     placeholder={resolved}
+                    onBrowse={() => browse(key, "file", `Select the ${label} executable`)}
+                    browseBusy={picking}
                     onChange={(value) => update(key, value)}
                   />
                   <span className={detected ? "pill ok" : "pill muted"} title={resolved}>
@@ -138,6 +157,8 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
                 value={settings.modelsDir}
                 wide
                 placeholder={config?.modelsDir ?? ""}
+                onBrowse={() => browse("modelsDir", "folder", "Select your models folder")}
+                browseBusy={picking}
                 onChange={(value) => update("modelsDir", value)}
               />
               <TextField

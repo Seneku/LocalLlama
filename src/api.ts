@@ -41,6 +41,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   config: () => request<RuntimeConfig>("/api/config"),
+  pickPath: (mode: "folder" | "file", opts: { title?: string; gguf?: boolean } = {}) =>
+    request<{ path: string | null }>("/api/dialog/pick", {
+      method: "POST",
+      body: JSON.stringify({ mode, ...opts })
+    }),
   settings: () => request<SettingsResponse>("/api/settings"),
   saveSettings: (settings: AppSettings) =>
     request<SettingsResponse>("/api/settings", {

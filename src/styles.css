@@ -792,6 +792,27 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.field-with-browse {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.field-with-browse input {
+  flex: 1;
+  min-width: 0;
+}
+
+.browse-btn {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.browse-btn:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
 .field span,
 .toggle-field span {
   color: var(--text-label);

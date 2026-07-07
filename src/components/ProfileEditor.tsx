@@ -1,7 +1,9 @@
 import { Copy, Cpu, RotateCcw, Save, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
+import { api } from "../api";
 import type { BackendMode, KvCacheType, LlamaProfile, ReasoningMode, SpecType, ThreadsMode } from "../shared/types";
+import type { Notify } from "./Toasts";
 import { ConfirmButton, NumberField, SelectField, TextField, ToggleField } from "./ui";
 
 interface ProfileEditorProps {
@@ -15,6 +17,7 @@ interface ProfileEditorProps {
   revertDraft(): void;
   deleteSelected(): Promise<void>;
   onDuplicate(): void;
+  notify: Notify;
 }
 
 export function ProfileEditor({
@@ -27,8 +30,25 @@ export function ProfileEditor({
   saveDraft,
   revertDraft,
   deleteSelected,
-  onDuplicate
+  onDuplicate,
+  notify
 }: ProfileEditorProps) {
+  const [picking, setPicking] = useState(false);
+
+  async function browseModel(apply: (path: string) => void, title: string) {
+    setPicking(true);
+    try {
+      const { path } = await api.pickPath("file", { title, gguf: true });
+      if (path) {
+        apply(path);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setPicking(false);
+    }
+  }
+
   if (!draft) {
     return (
       <section className="editor-panel">
@@ -88,6 +108,8 @@ export function ProfileEditor({
           value={draft.modelPath}
           wide
           placeholder="E:\Models\model.gguf"
+          onBrowse={() => browseModel((path) => updateDraft("modelPath", path), "Select a GGUF model")}
+          browseBusy={picking}
           onChange={(value) => updateDraft("modelPath", value)}
         />
         <TextField
@@ -223,6 +245,8 @@ export function ProfileEditor({
               value={draft.speculative.draftModelPath}
               wide
               placeholder="Path to the draft .gguf"
+              onBrowse={() => browseModel((path) => updateSpec("draftModelPath", path), "Select a draft GGUF model")}
+              browseBusy={picking}
               onChange={(value) => updateSpec("draftModelPath", value)}
             />
           </div>

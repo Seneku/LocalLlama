@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { BenchmarkManager, buildBenchmarkCommand } from "./benchmark";
 import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
+import { pickPath, type PickMode } from "./dialog";
 import { DownloadManager } from "./downloadManager";
 import { createFavoritesStore, type FavoritesStore } from "./favoritesStore";
 import { estimateProfileMemory, getHardwareInfo } from "./estimate";
@@ -124,6 +125,19 @@ async function routeApi(
 
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, createRuntimeConfig(fs.existsSync));
+    return;
+  }
+
+  // ---- native folder/file picker ----
+  if (request.method === "POST" && pathname === "/api/dialog/pick") {
+    const body = await readJson<{ mode?: string; title?: string; gguf?: boolean }>(request);
+    const mode: PickMode = body.mode === "file" ? "file" : "folder";
+    try {
+      const picked = await pickPath({ mode, title: body.title, gguf: body.gguf === true });
+      sendJson(response, 200, { path: picked });
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : "could not open a file dialog");
+    }
     return;
   }
 

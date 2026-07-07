@@ -18,8 +18,9 @@ const EXE = process.platform === "win32" ? ".exe" : "";
 const LLAMA_SERVER = `llama-server${EXE}`;
 const LLAMA_BENCH = `llama-bench${EXE}`;
 
-const DEFAULT_LLAMA_ROOT =
-  process.platform === "win32" ? "E:\\Projects\\llama.cpp" : path.join(homedir(), "llama.cpp");
+// A neutral, cross-platform guess (e.g. C:\Users\you\llama.cpp or ~/llama.cpp).
+// Users set their real path in Settings (with the folder picker) on first run.
+const DEFAULT_LLAMA_ROOT = path.join(homedir(), "llama.cpp");
 
 // Precedence: saved settings > environment variable > default derived from llamaRoot.
 export function getRuntimePaths(): RuntimePaths {

@@ -1,4 +1,4 @@
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, FolderOpen } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface TextFieldProps {
@@ -7,21 +7,53 @@ interface TextFieldProps {
   wide?: boolean;
   placeholder?: string;
   type?: "text" | "password";
+  /** When set, renders a Browse button that opens a native picker. */
+  onBrowse?(): void;
+  browseTitle?: string;
+  browseBusy?: boolean;
   onChange(value: string): void;
 }
 
-export function TextField({ label, value, wide = false, placeholder, type = "text", onChange }: TextFieldProps) {
+export function TextField({
+  label,
+  value,
+  wide = false,
+  placeholder,
+  type = "text",
+  onBrowse,
+  browseTitle = "Browse…",
+  browseBusy = false,
+  onChange
+}: TextFieldProps) {
+  const input = (
+    <input
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      spellCheck={false}
+      autoComplete={type === "password" ? "off" : undefined}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
   return (
     <label className={`field ${wide ? "wide" : ""}`}>
       <span>{label}</span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        spellCheck={false}
-        autoComplete={type === "password" ? "off" : undefined}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {onBrowse ? (
+        <div className="field-with-browse">
+          {input}
+          <button
+            type="button"
+            className="icon-button browse-btn"
+            title={browseTitle}
+            disabled={browseBusy}
+            onClick={onBrowse}
+          >
+            <FolderOpen size={15} />
+          </button>
+        </div>
+      ) : (
+        input
+      )}
     </label>
   );
 }
