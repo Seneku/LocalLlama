@@ -2,12 +2,12 @@ import { FolderCog, Package } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "./api";
-import { BenchmarkDashboard } from "./components/BenchmarkDashboard";
 import { ConnectToolsModal } from "./components/ConnectToolsModal";
 import { GetStartedModal } from "./components/GetStartedModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { ToastStack, useToasts } from "./components/Toasts";
 import { TopBar, type AppView } from "./components/TopBar";
+import { BenchmarksView } from "./views/BenchmarksView";
 import { ServerView } from "./views/ServerView";
 import type {
   CommandPreview,
@@ -447,7 +447,7 @@ export default function App() {
 
       <div className={`view ${view === "benchmarks" ? "" : "view-hidden"}`}>
         <div className="view-content">
-          <BenchmarkDashboard
+          <BenchmarksView
             draft={draft}
             selectedProfile={selectedProfile}
             isDirty={isDirty}

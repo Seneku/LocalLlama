@@ -590,7 +590,8 @@ h1 {
 .editor-panel,
 .runtime-panel,
 .logs-band,
-.benchmark-band {
+.benchmark-band,
+.bench-panel {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -1281,48 +1282,78 @@ dd.bad {
   padding: 14px;
 }
 
-.benchmark-band {
-  margin: 0 24px 18px;
-  padding: 14px;
+/* ---------- Benchmarks view ---------- */
+
+.bench-page {
+  display: grid;
+  gap: 14px;
+  padding: 18px 24px;
+  align-content: start;
 }
 
-.dashboard-header {
+.bench-panel {
+  padding: 14px;
+  min-width: 0;
+}
+
+.bench-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.benchmark-status {
-  margin-top: 0;
+.bench-header .panel-title {
+  gap: 12px;
 }
 
-.benchmark-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.92fr) minmax(260px, 0.6fr) minmax(420px, 1.25fr);
-  gap: 16px;
+.bench-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bench-config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 650;
+  padding: 0 4px;
+}
+
+.bench-config-toggle:hover:not(:disabled) {
+  border: none;
+  background: transparent;
+  color: var(--text-bright);
+}
+
+.bench-config-toggle small {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: var(--font-xs);
+  font-weight: 500;
+}
+
+.bench-config-body {
   margin-top: 12px;
-  align-items: start;
 }
 
-.benchmark-controls,
 .benchmark-history,
 .benchmark-log-panel {
   min-width: 0;
 }
 
-.benchmark-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .benchmark-settings {
   display: grid;
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
-  margin-top: 12px;
 }
 
 .benchmark-command {
@@ -1334,6 +1365,10 @@ dd.bad {
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 10px;
+}
+
+.bench-kpi-row {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
 }
 
 .metric-card {
@@ -1396,6 +1431,46 @@ dd.bad {
   border-radius: var(--radius-sm);
   padding: 9px;
   background: var(--bg-inset);
+}
+
+/* With enriched env data two extra columns appear: Model/quant and Build. */
+.result-table.with-env .result-row {
+  grid-template-columns:
+    24px minmax(140px, 1.1fr) minmax(110px, 0.9fr) 56px minmax(84px, 0.7fr)
+    minmax(84px, 0.7fr) minmax(72px, 0.6fr) 58px 38px;
+}
+
+.result-row .env-cell {
+  color: var(--text-dim);
+  font-size: var(--font-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-row.highlighted {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-start;
+  min-height: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+
+.sort-header:hover:not(:disabled) {
+  border: none;
+  background: transparent;
+  color: var(--text-bright);
 }
 
 .result-row.header {
@@ -1468,6 +1543,138 @@ dd.bad {
   padding: 0;
   accent-color: var(--green);
   cursor: pointer;
+}
+
+/* ---------- Trend chart ---------- */
+
+.bench-trend-toolbar {
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.metric-toggle {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.trend-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-dim);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.trend-select select {
+  width: auto;
+  min-height: var(--control-h-sm);
+  padding: 0 26px 0 8px;
+  font-size: var(--font-sm);
+}
+
+.trend-errorbars {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.trend-errorbars.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.trend-errorbars input {
+  width: 14px;
+  min-height: 14px;
+  height: 14px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.trend-chart {
+  position: relative;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.trend-chart svg {
+  display: block;
+}
+
+.trend-chart .grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.trend-chart .tick {
+  fill: var(--text-faint);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-chart .tick.unit {
+  fill: var(--text-dim);
+}
+
+.trend-chart .crosshair {
+  stroke: var(--text-faint);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.trend-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  pointer-events: none;
+  min-width: 150px;
+  max-width: 220px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-modal);
+  box-shadow: var(--shadow-2);
+  font-size: var(--font-xs);
+  color: var(--text-dim);
+}
+
+.trend-tooltip strong {
+  color: var(--text-bright);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: var(--font-sm);
+}
+
+.legend-item i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legend-item small {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .result-empty {
@@ -2383,8 +2590,8 @@ dd.bad {
     grid-column: 1 / -1;
   }
 
-  .benchmark-grid {
-    grid-template-columns: 1fr;
+  .bench-kpi-row {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 }
 
@@ -2414,28 +2621,23 @@ dd.bad {
     grid-template-columns: 1fr;
   }
 
-  .logs-band,
-  .benchmark-band {
+  .logs-band {
     margin-left: 16px;
     margin-right: 16px;
   }
 
-  .dashboard-header,
-  .benchmark-status {
-    align-items: flex-start;
-    justify-content: flex-start;
-  }
-
-  .dashboard-header {
-    flex-direction: column;
+  .bench-page {
+    padding: 16px;
   }
 
   .benchmark-settings,
-  .benchmark-kpis {
+  .benchmark-kpis,
+  .bench-kpi-row {
     grid-template-columns: 1fr;
   }
 
-  .result-row {
+  .result-row,
+  .result-table.with-env .result-row {
     grid-template-columns: 24px 1fr;
   }
 
