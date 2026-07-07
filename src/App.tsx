@@ -1,5 +1,6 @@
 import {
   Activity,
+  Coffee,
   Copy,
   Cpu,
   Database,
@@ -363,6 +364,16 @@ export default function App() {
           {status.profileName ? <span className="status-name">{status.profileName}</span> : null}
           {uptime ? <span className="status-uptime">up {uptime}</span> : null}
           {status.health === "unreachable" ? <span className="state-chip unreachable">unreachable</span> : null}
+          <a
+            className="bmc-button"
+            href="https://www.buymeacoffee.com/seneku"
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Support LlamaTuner — buy me a coffee"
+          >
+            <Coffee size={15} />
+            <span>Buy me a coffee</span>
+          </a>
           <button className="icon-button" title="Settings" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
           </button>
