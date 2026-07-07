@@ -43,6 +43,18 @@ export function getRuntimePaths(): RuntimePaths {
   };
 }
 
+// Where downloaded GGUF models live. Precedence: settings > env > default.
+export function getModelsDir(): string {
+  const settings = getSettings();
+  if (settings.modelsDir) {
+    return settings.modelsDir;
+  }
+  if (process.env.LLAMATUNER_MODELS_DIR) {
+    return process.env.LLAMATUNER_MODELS_DIR;
+  }
+  return path.join(getRuntimePaths().dataPath, "models");
+}
+
 export function getDefaultThreads(): number {
   try {
     return Math.max(1, availableParallelism());
@@ -56,6 +68,7 @@ export function createRuntimeConfig(fileExists: (filePath: string) => boolean): 
 
   return {
     ...paths,
+    modelsDir: getModelsDir(),
     defaultThreads: getDefaultThreads(),
     detected: {
       cudaServer: fileExists(paths.cudaServerPath),

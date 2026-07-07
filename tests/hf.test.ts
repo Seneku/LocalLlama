@@ -1,0 +1,121 @@
+import { describe, expect, test } from "bun:test";
+
+import {
+  classifyAsset,
+  classifyRelease,
+  coarseFit,
+  normalizeSearch,
+  normalizeTree,
+  parseQuant,
+  resolveDownloadUrl
+} from "../server/hf";
+import type { HardwareInfo } from "../src/shared/types";
+
+function hardware(freeMiB: number | null, totalMiB = 12281): HardwareInfo {
+  return {
+    totalRamMiB: 65536,
+    freeRamMiB: 48000,
+    gpus: freeMiB === null ? [] : [{ name: "RTX 4070 SUPER", totalMiB, usedMiB: totalMiB - freeMiB, freeMiB }]
+  };
+}
+
+describe("classifyAsset", () => {
+  test("distinguishes cudart from cuda and the rest", () => {
+    expect(classifyAsset("cudart-llama-bin-win-cuda-12.4-x64.zip")).toBe("cudart");
+    expect(classifyAsset("llama-b9894-bin-win-cuda-12.4-x64.zip")).toBe("cuda");
+    expect(classifyAsset("llama-b9894-bin-win-cpu-x64.zip")).toBe("cpu");
+    expect(classifyAsset("llama-b9894-bin-win-vulkan-x64.zip")).toBe("vulkan");
+    expect(classifyAsset("llama-b9894-bin-win-hip-radeon-x64.zip")).toBe("hip");
+    expect(classifyAsset("llama-b9894-bin-win-sycl-x64.zip")).toBe("sycl");
+    expect(classifyAsset("llama-b9894-bin-win-openvino-2026.2.1-x64.zip")).toBe("other");
+  });
+});
+
+describe("parseQuant", () => {
+  test("extracts the quant token from a filename", () => {
+    expect(parseQuant("Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")).toBe("Q4_K_M");
+    expect(parseQuant("model-IQ3_XS.gguf")).toBe("IQ3_XS");
+    expect(parseQuant("model.Q8_0.gguf")).toBe("Q8_0");
+    expect(parseQuant("model-f16.gguf")).toBe("F16");
+    expect(parseQuant("model-BF16.gguf")).toBe("BF16");
+    expect(parseQuant("some-model-name.gguf")).toBeNull();
+  });
+});
+
+describe("coarseFit", () => {
+  test("classifies against free VRAM", () => {
+    // need ~= sizeMiB * 1.12 + 1024
+    expect(coarseFit(5000, hardware(11000))).toBe("fits"); // 6624/11000 = 0.60
+    expect(coarseFit(8460, hardware(11000))).toBe("tight"); // 10499/11000 = 0.95
+    expect(coarseFit(9000, hardware(11000))).toBe("over"); // 11104/11000 = 1.01
+    expect(coarseFit(20000, hardware(11000))).toBe("over");
+    expect(coarseFit(5000, hardware(null))).toBe("unknown");
+  });
+
+  test("tight band sits just under capacity", () => {
+    // need == capacity boundary: pick sizeMiB so need ~= 0.95 * capacity
+    const capacity = 11000;
+    const sizeMiB = (0.95 * capacity - 1024) / 1.12; // ~8397
+    expect(coarseFit(sizeMiB, hardware(capacity))).toBe("tight");
+  });
+});
+
+describe("normalizeSearch", () => {
+  test("maps HF model objects and derives author from id", () => {
+    const results = normalizeSearch([
+      { id: "bartowski/Model-GGUF", downloads: 1000, likes: 12, pipeline_tag: "text-generation" },
+      { modelId: "org/Other-GGUF", gated: "manual", author: "org", downloads: 5, likes: 0 }
+    ]);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ id: "bartowski/Model-GGUF", author: "bartowski", downloads: 1000, gated: false });
+    expect(results[1]).toMatchObject({ id: "org/Other-GGUF", author: "org", gated: true });
+  });
+
+  test("tolerates non-array input", () => {
+    expect(normalizeSearch(null)).toEqual([]);
+  });
+});
+
+describe("normalizeTree", () => {
+  test("keeps only .gguf files, computes fit, and sorts by size", () => {
+    const files = normalizeTree(
+      [
+        { type: "file", path: "README.md", size: 1000 },
+        { type: "file", path: "model-Q8_0.gguf", size: 12_000_000_000 },
+        { type: "file", path: "model-Q4_K_M.gguf", size: 4_000_000_000 },
+        { type: "directory", path: "sub" }
+      ],
+      hardware(11000)
+    );
+    expect(files.map((file) => file.filename)).toEqual(["model-Q4_K_M.gguf", "model-Q8_0.gguf"]);
+    expect(files[0].quant).toBe("Q4_K_M");
+    expect(files[0].sizeMiB).toBeGreaterThan(3500);
+    expect(files[0].fit).toBe("fits");
+    expect(files[1].fit).toBe("over");
+  });
+});
+
+describe("classifyRelease", () => {
+  test("filters to win assets and classifies kinds", () => {
+    const release = classifyRelease({
+      tag_name: "b9894",
+      html_url: "https://github.com/ggml-org/llama.cpp/releases/tag/b9894",
+      assets: [
+        { name: "llama-b9894-bin-win-cuda-12.4-x64.zip", size: 100, browser_download_url: "https://x/cuda.zip" },
+        { name: "cudart-llama-bin-win-cuda-12.4-x64.zip", size: 200, browser_download_url: "https://x/cudart.zip" },
+        { name: "llama-b9894-bin-macos-arm64.tar.gz", size: 50, browser_download_url: "https://x/mac.tgz" }
+      ]
+    });
+    expect(release.tag).toBe("b9894");
+    expect(release.winAssets).toHaveLength(2);
+    expect(release.winAssets.map((asset) => asset.kind).sort()).toEqual(["cuda", "cudart"]);
+  });
+});
+
+describe("resolveDownloadUrl", () => {
+  test("builds the HF resolve URL", () => {
+    expect(resolveDownloadUrl("org/repo-GGUF", "model-Q4_K_M.gguf")).toBe(
+      "https://huggingface.co/org/repo-GGUF/resolve/main/model-Q4_K_M.gguf"
+    );
+  });
+});

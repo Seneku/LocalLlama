@@ -5,6 +5,7 @@ import {
   Cpu,
   Database,
   FolderCog,
+  Package,
   Play,
   Plus,
   RefreshCw,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { BenchmarkDashboard } from "./components/BenchmarkDashboard";
 import { LogView } from "./components/LogView";
+import { GetStartedModal } from "./components/GetStartedModal";
 import { RequirementsPanel } from "./components/RequirementsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ToastStack, useToasts } from "./components/Toasts";
@@ -95,6 +97,7 @@ export default function App() {
   const [logs, setLogs] = useState<RuntimeLog[]>([]);
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [getStartedTab, setGetStartedTab] = useState<"llama" | "models" | null>(null);
   const { toasts, notify, dismiss } = useToasts();
 
   const selectedProfile = useMemo(
@@ -332,6 +335,16 @@ export default function App() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
+  function useDownloadedModel(path: string) {
+    setGetStartedTab(null);
+    if (draft) {
+      updateDraft("modelPath", path);
+      notify("Model set on the current profile — save to keep it.", "info");
+    } else {
+      notify("Select or create a profile first, then use the model.", "error");
+    }
+  }
+
   function updateSpec<K extends keyof LlamaProfile["speculative"]>(
     key: K,
     value: LlamaProfile["speculative"][K]
@@ -364,6 +377,13 @@ export default function App() {
           {status.profileName ? <span className="status-name">{status.profileName}</span> : null}
           {uptime ? <span className="status-uptime">up {uptime}</span> : null}
           {status.health === "unreachable" ? <span className="state-chip unreachable">unreachable</span> : null}
+          <button
+            className="icon-button"
+            title="Get started — install llama.cpp & download models"
+            onClick={() => setGetStartedTab("models")}
+          >
+            <Package size={16} />
+          </button>
           <a
             className="bmc-button"
             href="https://www.buymeacoffee.com/seneku"
@@ -387,6 +407,14 @@ export default function App() {
         onConfigChanged={setConfig}
         notify={notify}
       />
+      <GetStartedModal
+        open={getStartedTab !== null}
+        initialTab={getStartedTab ?? "models"}
+        config={config}
+        onClose={() => setGetStartedTab(null)}
+        onUseModel={useDownloadedModel}
+        notify={notify}
+      />
 
       {config && !config.detected.cudaServer && !config.detected.cpuServer ? (
         <div className="onboarding">
@@ -394,13 +422,13 @@ export default function App() {
           <div>
             <strong>llama.cpp not found</strong>
             <span>
-              No <code>llama-server</code> was detected under <code>{config.llamaRoot}</code>. Point LlamaTuner at
-              your build to start launching and benchmarking.
+              No <code>llama-server</code> was detected under <code>{config.llamaRoot}</code>. LlamaTuner runs your
+              local llama.cpp build — get set up in a couple of minutes.
             </span>
           </div>
-          <button className="primary" onClick={() => setSettingsOpen(true)}>
-            <FolderCog size={16} />
-            Open Settings
+          <button className="primary" onClick={() => setGetStartedTab("llama")}>
+            <Package size={16} />
+            Setup guide
           </button>
         </div>
       ) : null}

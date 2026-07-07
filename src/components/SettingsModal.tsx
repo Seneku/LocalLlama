@@ -11,7 +11,9 @@ const emptySettings: AppSettings = {
   cudaServerPath: "",
   cpuServerPath: "",
   cudaBenchPath: "",
-  cpuBenchPath: ""
+  cpuBenchPath: "",
+  modelsDir: "",
+  hfToken: ""
 };
 
 interface SettingsModalProps {
@@ -129,6 +131,23 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
                   </span>
                 </div>
               ))}
+
+              <div className="settings-divider">Models</div>
+              <TextField
+                label="Models folder"
+                value={settings.modelsDir}
+                wide
+                placeholder={config?.modelsDir ?? ""}
+                onChange={(value) => update("modelsDir", value)}
+              />
+              <TextField
+                label="Hugging Face token (optional)"
+                value={settings.hfToken}
+                wide
+                type="password"
+                placeholder="hf_… — only needed for gated/private models"
+                onChange={(value) => update("hfToken", value)}
+              />
             </div>
 
             <div className="modal-actions">

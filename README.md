@@ -12,6 +12,7 @@ Grab the latest **`LlamaTuner.exe`** from the [Releases page](https://github.com
 
 ## Features
 
+- **Get started in-app** — a setup guide that recommends the right prebuilt llama.cpp Windows build for your hardware (with direct release links), plus a **model browser** that searches Hugging Face for GGUF models, flags which quantizations fit your GPU, and downloads them straight into your models folder with live progress.
 - **Profiles** — save reusable server configs (model, context, GPU layers, KV-cache quant, parallel slots, speculative decoding, etc.), with a live-updating preview of the exact `llama-server` command.
 - **Accurate VRAM estimation** — parses the GGUF tensor table for exact per-layer weights and KV geometry, and models the things simple heuristics miss: interleaved **sliding-window attention** (Gemma-family), **hybrid SSM** layers (Qwen3.5/recurrent), **MTP/nextn** blocks, tied-embedding output heads, and llama.cpp's offload order. Calibrated against measured `llama-server` allocations.
 - **GPU-layer auto-recommend** — inverts the estimator to suggest the largest `-ngl` that fits your currently-free VRAM (or to offload *more* when there's headroom), with one-click apply.
@@ -70,6 +71,7 @@ Paths resolve in order: **Settings (saved in the UI) → environment variables �
 | `LLAMATUNER_CUDA_SERVER` / `LLAMATUNER_CPU_SERVER` | Override the `llama-server` binary paths |
 | `LLAMATUNER_CUDA_BENCH` / `LLAMATUNER_CPU_BENCH` | Override the `llama-bench` binary paths |
 | `LLAMATUNER_DATA_DIR` | Where profiles, benchmark history, and settings are stored (default `./data`) |
+| `LLAMATUNER_MODELS_DIR` | Where downloaded GGUF models are saved (default `<data>/models`) |
 | `LLAMATUNER_PORT` / `LLAMATUNER_HOST` | Standalone server bind address (default `127.0.0.1:4187`) |
 
 ## Development

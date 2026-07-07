@@ -8,7 +8,9 @@ export const EMPTY_SETTINGS: AppSettings = {
   cudaServerPath: "",
   cpuServerPath: "",
   cudaBenchPath: "",
-  cpuBenchPath: ""
+  cpuBenchPath: "",
+  modelsDir: "",
+  hfToken: ""
 };
 
 // The settings file lives in the data directory, which is intentionally NOT
@@ -28,7 +30,9 @@ function sanitize(raw: unknown): AppSettings {
     cudaServerPath: text(source.cudaServerPath),
     cpuServerPath: text(source.cpuServerPath),
     cudaBenchPath: text(source.cudaBenchPath),
-    cpuBenchPath: text(source.cpuBenchPath)
+    cpuBenchPath: text(source.cpuBenchPath),
+    modelsDir: text(source.modelsDir),
+    hfToken: text(source.hfToken)
   };
 }
 

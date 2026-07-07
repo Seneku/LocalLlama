@@ -4,14 +4,16 @@ import path from "node:path";
 
 import { BenchmarkManager, buildBenchmarkCommand } from "./benchmark";
 import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
-import { estimateProfileMemory } from "./estimate";
+import { DownloadManager } from "./downloadManager";
+import { estimateProfileMemory, getHardwareInfo } from "./estimate";
+import { getLatestLlamaCppRelease, HttpProxyError, listModelFiles, searchModels } from "./hf";
 import { buildCommand } from "./llama";
 import { createProfileStore, type ProfileStore } from "./profileStore";
-import { createRuntimeConfig } from "./paths";
+import { createRuntimeConfig, getModelsDir } from "./paths";
 import { RuntimeManager } from "./runtime";
 import { getSettings, saveSettings } from "./settings";
 import { normalizeProfile } from "./normalize";
-import type { BenchmarkSettings } from "../src/shared/types";
+import type { BenchmarkSettings, LocalModel } from "../src/shared/types";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -27,6 +29,7 @@ interface AppDeps {
   runtime?: RuntimeManager;
   benchmarkStore?: BenchmarkStore;
   benchmark?: BenchmarkManager;
+  downloads?: DownloadManager;
   /**
    * Self-contained SPA HTML. When provided (standalone/compiled builds), all
    * non-API GET requests serve this instead of reading files from dist/.
@@ -88,6 +91,22 @@ function createId(name: string): string {
   return `${slug || "profile"}-${Date.now().toString(36)}-${suffix}`;
 }
 
+function listLocalModels(): LocalModel[] {
+  const dir = getModelsDir();
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.toLowerCase().endsWith(".gguf"))
+    .map((name) => {
+      const full = path.join(dir, name);
+      const sizeBytes = fs.statSync(full).size;
+      return { name, path: full, sizeBytes, sizeMiB: Math.round(sizeBytes / 1024 / 1024) };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function routeApi(
   request: IncomingMessage,
   response: ServerResponse,
@@ -95,10 +114,74 @@ async function routeApi(
   store: ProfileStore,
   runtime: RuntimeManager,
   benchmarkStore: BenchmarkStore,
-  benchmark: BenchmarkManager
+  benchmark: BenchmarkManager,
+  downloads: DownloadManager
 ): Promise<void> {
+  const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
+
   if (request.method === "GET" && pathname === "/api/config") {
     sendJson(response, 200, createRuntimeConfig(fs.existsSync));
+    return;
+  }
+
+  // ---- llama.cpp setup guide ----
+  if (request.method === "GET" && pathname === "/api/llamacpp/latest") {
+    sendJson(response, 200, await getLatestLlamaCppRelease());
+    return;
+  }
+
+  // ---- model discovery + download ----
+  if (request.method === "GET" && pathname === "/api/models/search") {
+    const results = await searchModels(query.get("q") ?? "", query.get("sort") ?? "downloads");
+    sendJson(response, 200, results);
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/files") {
+    const id = query.get("id");
+    if (!id) {
+      throw new HttpError(400, "a model id is required");
+    }
+    const hardware = await getHardwareInfo();
+    const files = await listModelFiles(id, hardware);
+    sendJson(response, 200, { id, gated: false, files, hardware });
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/models/download") {
+    const body = await readJson<{ id?: string; filename?: string }>(request);
+    sendJson(response, 200, await downloads.start({ id: body.id ?? "", filename: body.filename ?? "" }));
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/download/status") {
+    sendJson(response, 200, downloads.getStatus());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/models/download/cancel") {
+    sendJson(response, 200, await downloads.cancel());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/local") {
+    sendJson(response, 200, listLocalModels());
+    return;
+  }
+
+  const localModelMatch = pathname.match(/^\/api\/models\/local\/([^/]+)$/u);
+  if (localModelMatch && request.method === "DELETE") {
+    const name = decodeURIComponent(localModelMatch[1]);
+    if (path.basename(name) !== name || !name.toLowerCase().endsWith(".gguf")) {
+      throw new HttpError(400, "invalid model filename");
+    }
+    const full = path.join(getModelsDir(), name);
+    if (!fs.existsSync(full)) {
+      sendError(response, 404, "model not found");
+      return;
+    }
+    fs.rmSync(full, { force: true });
+    sendJson(response, 200, { ok: true });
     return;
   }
 
@@ -297,13 +380,14 @@ export function createRequestHandler(deps: AppDeps = {}) {
   const runtime = deps.runtime ?? new RuntimeManager();
   const benchmarkStore = deps.benchmarkStore ?? createBenchmarkStore();
   const benchmark = deps.benchmark ?? new BenchmarkManager(benchmarkStore);
+  const downloads = deps.downloads ?? new DownloadManager();
   const appHtml = deps.appHtml;
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (url.pathname.startsWith("/api/")) {
-        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark);
+        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark, downloads);
         return;
       }
       if (request.method !== "GET" && request.method !== "HEAD") {
@@ -318,7 +402,7 @@ export function createRequestHandler(deps: AppDeps = {}) {
       }
       serveStatic(response, url.pathname);
     } catch (error) {
-      if (error instanceof HttpError) {
+      if (error instanceof HttpError || error instanceof HttpProxyError) {
         sendError(response, error.status, error.message);
         return;
       }

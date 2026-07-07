@@ -52,6 +52,10 @@ export interface AppSettings {
   cpuServerPath: string;
   cudaBenchPath: string;
   cpuBenchPath: string;
+  /** Where downloaded GGUF models are saved. Empty = default <dataPath>/models. */
+  modelsDir: string;
+  /** Optional Hugging Face access token for gated/private model downloads. */
+  hfToken: string;
 }
 
 export interface SettingsResponse {
@@ -66,6 +70,7 @@ export interface RuntimeConfig {
   cudaBenchPath: string;
   cpuBenchPath: string;
   dataPath: string;
+  modelsDir: string;
   defaultThreads: number;
   detected: {
     cudaServer: boolean;
@@ -73,6 +78,71 @@ export interface RuntimeConfig {
     cudaBench: boolean;
     cpuBench: boolean;
   };
+}
+
+// ---- llama.cpp setup guide ----
+
+export type LlamaCppAssetKind = "cpu" | "cuda" | "vulkan" | "hip" | "sycl" | "cudart" | "other";
+
+export interface LlamaCppAsset {
+  name: string;
+  size: number;
+  url: string;
+  kind: LlamaCppAssetKind;
+}
+
+export interface LlamaCppRelease {
+  tag: string;
+  htmlUrl: string;
+  winAssets: LlamaCppAsset[];
+}
+
+// ---- model discovery + download ----
+
+export interface ModelSearchResult {
+  id: string;
+  author: string;
+  downloads: number;
+  likes: number;
+  gated: boolean;
+  pipelineTag: string | null;
+  updatedAt: string | null;
+}
+
+export interface ModelFile {
+  filename: string;
+  sizeBytes: number;
+  sizeMiB: number;
+  quant: string | null;
+  fit: EstimateFit;
+}
+
+export interface ModelFilesResponse {
+  id: string;
+  gated: boolean;
+  files: ModelFile[];
+  hardware: HardwareInfo;
+}
+
+export type DownloadState = "idle" | "downloading" | "completed" | "failed" | "cancelled";
+
+export interface DownloadStatus {
+  state: DownloadState;
+  modelId: string | null;
+  filename: string | null;
+  dest: string | null;
+  totalBytes: number | null;
+  receivedBytes: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+}
+
+export interface LocalModel {
+  name: string;
+  path: string;
+  sizeBytes: number;
+  sizeMiB: number;
 }
 
 export interface CommandPreview {

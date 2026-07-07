@@ -5,8 +5,13 @@ import type {
   BenchmarkSettings,
   BenchmarkStatus,
   CommandPreview,
+  DownloadStatus,
+  LlamaCppRelease,
   LlamaProfile,
+  LocalModel,
   MemoryEstimate,
+  ModelFilesResponse,
+  ModelSearchResult,
   RuntimeConfig,
   RuntimeLog,
   RuntimeStatus,
@@ -90,5 +95,19 @@ export const api = {
   deleteBenchmark: (id: string) =>
     request<{ ok: boolean }>(`/api/benchmarks/${encodeURIComponent(id)}`, {
       method: "DELETE"
-    })
+    }),
+  llamaCppRelease: () => request<LlamaCppRelease>("/api/llamacpp/latest"),
+  searchModels: (query: string, sort = "downloads") =>
+    request<ModelSearchResult[]>(`/api/models/search?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(sort)}`),
+  modelFiles: (id: string) => request<ModelFilesResponse>(`/api/models/files?id=${encodeURIComponent(id)}`),
+  startDownload: (id: string, filename: string) =>
+    request<DownloadStatus>("/api/models/download", {
+      method: "POST",
+      body: JSON.stringify({ id, filename })
+    }),
+  downloadStatus: () => request<DownloadStatus>("/api/models/download/status"),
+  cancelDownload: () => request<DownloadStatus>("/api/models/download/cancel", { method: "POST" }),
+  localModels: () => request<LocalModel[]>("/api/models/local"),
+  deleteLocalModel: (name: string) =>
+    request<{ ok: boolean }>(`/api/models/local/${encodeURIComponent(name)}`, { method: "DELETE" })
 };

@@ -6,17 +6,20 @@ interface TextFieldProps {
   value: string;
   wide?: boolean;
   placeholder?: string;
+  type?: "text" | "password";
   onChange(value: string): void;
 }
 
-export function TextField({ label, value, wide = false, placeholder, onChange }: TextFieldProps) {
+export function TextField({ label, value, wide = false, placeholder, type = "text", onChange }: TextFieldProps) {
   return (
     <label className={`field ${wide ? "wide" : ""}`}>
       <span>{label}</span>
       <input
+        type={type}
         value={value}
         placeholder={placeholder}
         spellCheck={false}
+        autoComplete={type === "password" ? "off" : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
