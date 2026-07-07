@@ -1,8 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { extractBenchmarkEnv } from "./benchmarkEnv";
 import { getRuntimePaths } from "./paths";
 import type { BenchmarkRun } from "../src/shared/types";
+
+// Long-term history window. Runs store only capped stream tails, so even the
+// maximum is a modest JSON file.
+export const MAX_STORED_RUNS = 1000;
 
 export interface BenchmarkStore {
   benchmarksFile: string;
@@ -45,7 +50,21 @@ export function createBenchmarkStore(benchmarksFile?: string): BenchmarkStore {
     if (!Array.isArray(parsed)) {
       throw new Error("benchmarks.json must contain an array of benchmark runs");
     }
+    // Backfill env on runs stored before enrichment so history views can rely
+    // on it. Persisted once through the write chain; in-memory results are
+    // correct immediately either way.
+    let migrated = false;
+    for (let index = 0; index < parsed.length; index++) {
+      const run = parsed[index];
+      if (run.env === undefined) {
+        parsed[index] = { ...run, env: run.rows?.length ? extractBenchmarkEnv(run.rows) : null };
+        migrated = true;
+      }
+    }
     cache = parsed;
+    if (migrated) {
+      saveRuns(parsed).catch(() => undefined);
+    }
     return cache;
   }
 
@@ -86,7 +105,7 @@ export function createBenchmarkStore(benchmarksFile?: string): BenchmarkStore {
         } else {
           next[index] = run;
         }
-        const trimmed = next.slice(0, 200);
+        const trimmed = next.slice(0, MAX_STORED_RUNS);
         await writeFileAtomic(`${JSON.stringify(trimmed, null, 2)}\n`);
         cache = trimmed;
         seeded = true;

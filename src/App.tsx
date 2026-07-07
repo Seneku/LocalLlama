@@ -7,6 +7,7 @@ import {
   FolderCog,
   Package,
   Play,
+  Plug,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { api } from "./api";
 import { BenchmarkDashboard } from "./components/BenchmarkDashboard";
+import { ConnectToolsModal } from "./components/ConnectToolsModal";
 import { LogView } from "./components/LogView";
 import { GetStartedModal } from "./components/GetStartedModal";
 import { RequirementsPanel } from "./components/RequirementsPanel";
@@ -98,6 +100,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [getStartedTab, setGetStartedTab] = useState<"llama" | "models" | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
   const { toasts, notify, dismiss } = useToasts();
 
   const selectedProfile = useMemo(
@@ -394,6 +397,13 @@ export default function App() {
             <Coffee size={15} />
             <span>Buy me a coffee</span>
           </a>
+          <button
+            className="icon-button"
+            title="Connect to tools — OpenCode, Cline, Continue, Aider…"
+            onClick={() => setConnectOpen(true)}
+          >
+            <Plug size={16} />
+          </button>
           <button className="icon-button" title="Settings" onClick={() => setSettingsOpen(true)}>
             <Settings size={16} />
           </button>
@@ -413,6 +423,15 @@ export default function App() {
         config={config}
         onClose={() => setGetStartedTab(null)}
         onUseModel={useDownloadedModel}
+        notify={notify}
+      />
+      <ConnectToolsModal
+        open={connectOpen}
+        status={status}
+        preview={preview}
+        draft={draft}
+        onClose={() => setConnectOpen(false)}
+        onSetAlias={(alias) => updateDraft("modelAlias", alias)}
         notify={notify}
       />
 
@@ -730,6 +749,9 @@ export default function App() {
                 ) : (
                   "-"
                 )}
+                <button className="connect-link" title="Connect an external tool to this server" onClick={() => setConnectOpen(true)}>
+                  <Plug size={13} /> Connect…
+                </button>
               </dd>
             </div>
             <div>

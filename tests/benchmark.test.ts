@@ -6,6 +6,8 @@ import {
   defaultBenchmarkSettings,
   parseBenchmarkRows
 } from "../server/benchmark";
+import { extractBenchmarkEnv } from "../server/benchmarkEnv";
+import type { BenchmarkRow } from "../src/shared/types";
 import { exampleProfiles } from "../server/defaultProfiles";
 import type { RuntimePaths } from "../server/paths";
 
@@ -86,5 +88,75 @@ describe("benchmark parsing", () => {
     expect(metrics.generationMsPerToken).toBeCloseTo(13.3547, 4);
     expect(metrics.totalSeconds).toBe(14);
     expect(metrics.score).toBeCloseTo(Math.sqrt(1122.45 * 74.88), 4);
+  });
+});
+
+describe("extractBenchmarkEnv", () => {
+  function row(raw: Record<string, unknown>): BenchmarkRow {
+    return {
+      test: "pp512",
+      promptTokens: 512,
+      generationTokens: 0,
+      avgTokensPerSecond: 1000,
+      stddevTokensPerSecond: 10,
+      avgMilliseconds: 500,
+      raw
+    };
+  }
+
+  test("hoists build, hardware, and model identity from a realistic raw row", () => {
+    const env = extractBenchmarkEnv([
+      row({
+        build_commit: "e3ba22d6c",
+        build_number: 9503,
+        cpu_info: "AMD Ryzen 9 7950X 16-Core Processor",
+        gpu_info: "NVIDIA GeForce RTX 4070 SUPER",
+        backends: "CUDA",
+        model_type: "qwen35 9B Q4_K - Medium",
+        model_size: 5444231168,
+        model_n_params: 9401247744,
+        n_gpu_layers: 99,
+        flash_attn: 1
+      })
+    ]);
+    expect(env).toMatchObject({
+      buildNumber: 9503,
+      buildCommit: "e3ba22d6c",
+      gpuName: "NVIDIA GeForce RTX 4070 SUPER",
+      cpuName: "AMD Ryzen 9 7950X 16-Core Processor",
+      backends: "CUDA",
+      modelType: "qwen35 9B Q4_K - Medium",
+      modelParams: 9401247744,
+      nGpuLayers: 99,
+      flashAttn: true
+    });
+  });
+
+  test("missing fields become nulls, never throws", () => {
+    const env = extractBenchmarkEnv([row({ avg_ts: 100 })]);
+    expect(env).toEqual({
+      buildNumber: null,
+      buildCommit: null,
+      gpuName: null,
+      cpuName: null,
+      backends: null,
+      modelType: null,
+      modelSizeBytes: null,
+      modelParams: null,
+      nGpuLayers: null,
+      flashAttn: null
+    });
+  });
+
+  test("empty rows or empty raw yield null", () => {
+    expect(extractBenchmarkEnv([])).toBeNull();
+    expect(extractBenchmarkEnv([row({})])).toBeNull();
+  });
+
+  test("flash_attn variants coerce across llama-bench builds", () => {
+    expect(extractBenchmarkEnv([row({ flash_attn: true, x: 1 })])?.flashAttn).toBe(true);
+    expect(extractBenchmarkEnv([row({ flash_attn: 0, x: 1 })])?.flashAttn).toBe(false);
+    expect(extractBenchmarkEnv([row({ flash_attn: "1", x: 1 })])?.flashAttn).toBe(true);
+    expect(extractBenchmarkEnv([row({ flash_attn: "false", x: 1 })])?.flashAttn).toBe(false);
   });
 });

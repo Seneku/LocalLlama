@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import { extractBenchmarkEnv } from "./benchmarkEnv";
 import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
 import { getDefaultThreads, getRuntimePaths, type RuntimePaths } from "./paths";
 import { killTree } from "./runtime";
@@ -337,6 +338,7 @@ export class BenchmarkManager {
       profile: createProfileSnapshot(profile),
       rows: [],
       metrics: calculateBenchmarkMetrics([], new Date().toISOString(), null),
+      env: null,
       stdout: "",
       stderr: "",
       error: null
@@ -421,6 +423,7 @@ export class BenchmarkManager {
       signal,
       rows,
       metrics: calculateBenchmarkMetrics(rows, this.activeRun.createdAt, completedAt),
+      env: extractBenchmarkEnv(rows),
       stdout: capTail(this.stdout, STORED_STREAM_BYTES),
       stderr: capTail(this.stderr, STORED_STREAM_BYTES),
       error

@@ -228,6 +228,25 @@ export interface BenchmarkMetrics {
   score: number | null;
 }
 
+/**
+ * Environment facts hoisted out of llama-bench's raw JSON at completion time so
+ * long-term history can be grouped/charted by engine build, hardware, and model
+ * identity without digging through rows[].raw. Every field is independently
+ * nullable — llama-bench's output schema drifts across builds.
+ */
+export interface BenchmarkEnv {
+  buildNumber: number | null;
+  buildCommit: string | null;
+  gpuName: string | null;
+  cpuName: string | null;
+  backends: string | null;
+  modelType: string | null;
+  modelSizeBytes: number | null;
+  modelParams: number | null;
+  nGpuLayers: number | null;
+  flashAttn: boolean | null;
+}
+
 export interface BenchmarkProfileSnapshot {
   name: string;
   modelPath: string;
@@ -260,6 +279,8 @@ export interface BenchmarkRun {
   profile: BenchmarkProfileSnapshot;
   rows: BenchmarkRow[];
   metrics: BenchmarkMetrics;
+  /** Optional: absent on runs stored before enrichment; backfilled on load. */
+  env?: BenchmarkEnv | null;
   stdout: string;
   stderr: string;
   error: string | null;
