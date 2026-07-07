@@ -1,5 +1,5 @@
 export type BackendMode = "auto" | "cuda" | "cpu";
-export type ResolvedBackend = "CUDA" | "CPU";
+export type ResolvedBackend = "CUDA" | "CPU" | "Metal";
 export type ReasoningMode = "off" | "auto";
 export type ThreadsMode = "auto" | "manual";
 export type KvCacheType = "" | "f16" | "q8_0" | "q4_0" | "q4_1";

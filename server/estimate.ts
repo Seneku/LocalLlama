@@ -4,6 +4,7 @@ import os from "node:os";
 import { promisify } from "node:util";
 
 import { readGgufModelInfo, type GgufTensorLayout } from "./gguf";
+import { isAppleSilicon } from "./platform";
 import type {
   GpuInfo,
   HardwareInfo,
@@ -102,7 +103,16 @@ function resolveBackend(profile: LlamaProfile, hardware: HardwareInfo): Resolved
   if (profile.backendMode === "cpu") {
     return "CPU";
   }
-  return hardware.gpus.length > 0 ? "CUDA" : "CPU";
+  if (hardware.gpus.length === 0) {
+    return "CPU";
+  }
+  return isAppleSilicon() ? "Metal" : "CUDA";
+}
+
+// CUDA and Metal both offload weights/KV to the GPU; the estimator treats them
+// identically (Metal shares system RAM, but the offload math is the same).
+function usesGpu(backend: ResolvedBackend): boolean {
+  return backend === "CUDA" || backend === "Metal";
 }
 
 interface LayerModel {
@@ -196,7 +206,7 @@ function buildModelPlan(
   const keyBytes = cacheTypeBytes(profile.kvCacheK);
   const valueBytes = cacheTypeBytes(profile.kvCacheV);
   const fileBytes = metadata.fileSizeMiB * 1024 * 1024;
-  const gpuLayers = backend === "CUDA" ? Math.max(0, profile.gpuLayers) : 0;
+  const gpuLayers = usesGpu(backend) ? Math.max(0, profile.gpuLayers) : 0;
 
   interface BlockInfo {
     index: number;
@@ -354,7 +364,7 @@ function estimateKv(profile: LlamaProfile, metadata: ModelMetadata, plan: ModelP
 }
 
 function computeOverheadMiB(profile: LlamaProfile, metadata: ModelMetadata, backend: ResolvedBackend): number {
-  if (backend !== "CUDA" || profile.gpuLayers <= 0) {
+  if (!usesGpu(backend) || profile.gpuLayers <= 0) {
     return 0;
   }
   const embedding = metadata.embeddingLength ?? 4096;
@@ -366,7 +376,7 @@ function computeOverheadMiB(profile: LlamaProfile, metadata: ModelMetadata, back
 }
 
 function estimateDraftMiB(profile: LlamaProfile, backend: ResolvedBackend, fileExists: (filePath: string) => boolean): number {
-  if (backend !== "CUDA" || !profile.speculative.enabled || !profile.speculative.draftModelPath.trim()) {
+  if (!usesGpu(backend) || !profile.speculative.enabled || !profile.speculative.draftModelPath.trim()) {
     return 0;
   }
   try {
@@ -405,7 +415,7 @@ function recommendGpuLayers(
   availableVramMiB: number | null,
   draftMiB: number
 ) {
-  if (backend !== "CUDA" || !availableVramMiB || availableVramMiB <= 0) {
+  if (!usesGpu(backend) || !availableVramMiB || availableVramMiB <= 0) {
     return null;
   }
   const blockCount = metadata.blockCount ?? layout?.layers.length ?? 0;
@@ -452,17 +462,59 @@ function fitStatus(estimatedVramMiB: number, availableVramMiB: number | null, to
 const HARDWARE_CACHE_TTL_MS = 3000;
 let hardwareCache: { info: HardwareInfo; at: number } | null = null;
 
+// Apple's Metal recommendedMaxWorkingSetSize (the share of unified memory the
+// GPU may use) can't be read from a shell, so approximate it: honor an explicit
+// iogpu.wired_limit_mb override, else ~2/3 of RAM on smaller machines rising to
+// ~3/4 on larger ones — roughly matching macOS defaults.
+export function appleWorkingSetMiB(totalRamMiB: number, overrideMiB: number | null): number {
+  if (overrideMiB && overrideMiB > 0) {
+    return overrideMiB;
+  }
+  const fraction = totalRamMiB <= 36 * 1024 ? 0.67 : 0.75;
+  return Math.floor(totalRamMiB * fraction);
+}
+
+async function detectAppleSiliconGpu(totalRamMiB: number, freeRamMiB: number): Promise<GpuInfo | null> {
+  if (!isAppleSilicon()) {
+    return null;
+  }
+  let overrideMiB: number | null = null;
+  try {
+    const { stdout } = await execFileAsync("sysctl", ["-n", "iogpu.wired_limit_mb"]);
+    const parsed = Number(stdout.trim());
+    if (Number.isFinite(parsed)) {
+      overrideMiB = parsed;
+    }
+  } catch {
+    // Key absent on older macOS; fall back to the fraction.
+  }
+  let name = "Apple Silicon GPU";
+  try {
+    const { stdout } = await execFileAsync("sysctl", ["-n", "machdep.cpu.brand_string"]);
+    if (stdout.trim()) {
+      name = `${stdout.trim()} (Metal)`;
+    }
+  } catch {
+    // Keep the generic name.
+  }
+  const budgetMiB = appleWorkingSetMiB(totalRamMiB, overrideMiB);
+  // Unified memory: free GPU ≈ free system RAM, capped to the working-set budget.
+  const freeMiB = Math.min(budgetMiB, freeRamMiB);
+  return { name, totalMiB: budgetMiB, usedMiB: Math.max(0, budgetMiB - freeMiB), freeMiB };
+}
+
 export async function getHardwareInfo(): Promise<HardwareInfo> {
   const now = Date.now();
   if (hardwareCache && now - hardwareCache.at < HARDWARE_CACHE_TTL_MS) {
     return hardwareCache.info;
   }
 
+  const totalRamMiB = bytesToMiB(os.totalmem());
+  const freeRamMiB = bytesToMiB(os.freemem());
   const gpus: GpuInfo[] = [];
   try {
     // nvidia-smi is `nvidia-smi.exe` on Windows, `nvidia-smi` elsewhere. On
-    // machines without an NVIDIA GPU (incl. Apple Silicon) this throws and we
-    // fall back to system-RAM-only estimates.
+    // machines without an NVIDIA GPU (incl. Apple Silicon) this throws.
     const nvidiaSmi = process.platform === "win32" ? "nvidia-smi.exe" : "nvidia-smi";
     const { stdout } = await execFileAsync(nvidiaSmi, [
       "--query-gpu=name,memory.total,memory.used,memory.free",
@@ -481,14 +533,17 @@ export async function getHardwareInfo(): Promise<HardwareInfo> {
       });
     }
   } catch {
-    // Non-NVIDIA systems still get system RAM estimates.
+    // No NVIDIA GPU; try Apple Silicon's unified-memory GPU next.
   }
 
-  const info: HardwareInfo = {
-    totalRamMiB: bytesToMiB(os.totalmem()),
-    freeRamMiB: bytesToMiB(os.freemem()),
-    gpus
-  };
+  if (gpus.length === 0) {
+    const apple = await detectAppleSiliconGpu(totalRamMiB, freeRamMiB);
+    if (apple) {
+      gpus.push(apple);
+    }
+  }
+
+  const info: HardwareInfo = { totalRamMiB, freeRamMiB, gpus };
   hardwareCache = { info, at: now };
   return info;
 }
@@ -523,7 +578,7 @@ export async function estimateProfileMemory(
   const overheadMiB = computeOverheadMiB(profile, metadata, backend);
   const draftMiB = estimateDraftMiB(profile, backend, fileExists);
 
-  const gpuActive = backend === "CUDA" && profile.gpuLayers > 0;
+  const gpuActive = usesGpu(backend) && profile.gpuLayers > 0;
   const preMarginVram = gpuActive ? plan.gpuWeightsMiB + kv.gpuMiB + overheadMiB + draftMiB : 0;
   const safetyMarginMiB = gpuActive ? Math.max(384, preMarginVram * 0.04) : 0;
   const estimatedVramMiB = preMarginVram + safetyMarginMiB;
@@ -539,7 +594,13 @@ export async function estimateProfileMemory(
   } else {
     assumptions.push("GGUF tensor table unavailable; using metadata heuristics for per-layer sizes.");
   }
-  assumptions.push("Includes ~200 MiB CUDA context overhead and a 4% (min 384 MiB) safety margin.");
+  if (backend === "Metal") {
+    assumptions.push(
+      "Apple Silicon (Metal): GPU offload shares unified memory with the system, so “VRAM” is drawn from RAM. GPU budget and overhead are approximate."
+    );
+  } else {
+    assumptions.push("Includes ~200 MiB CUDA context overhead and a 4% (min 384 MiB) safety margin.");
+  }
   if (profile.gpuLayers >= 99) {
     assumptions.push("GPU layers 99+ is treated as full model offload.");
   }

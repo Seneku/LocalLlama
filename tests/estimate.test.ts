@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { estimateProfileMemory } from "../server/estimate";
+import { appleWorkingSetMiB, estimateProfileMemory } from "../server/estimate";
 import { defaultProfiles } from "../server/defaultProfiles";
 import type { GgufTensorLayout } from "../server/gguf";
 import type { HardwareInfo, LlamaProfile, ModelMetadata } from "../src/shared/types";
@@ -258,5 +258,17 @@ describe("memory estimates", () => {
     expect(estimate.estimatedVramMiB).toBe(0);
     expect(estimate.estimatedSystemRamMiB).toBeGreaterThan(1000);
     expect(estimate.warnings.some((item) => item.includes("CPU profiles"))).toBe(true);
+  });
+});
+
+describe("appleWorkingSetMiB", () => {
+  test("honors an explicit iogpu.wired_limit_mb override", () => {
+    expect(appleWorkingSetMiB(32768, 28000)).toBe(28000);
+  });
+
+  test("uses ~2/3 of RAM on smaller machines, ~3/4 on larger", () => {
+    expect(appleWorkingSetMiB(16384, null)).toBe(Math.floor(16384 * 0.67));
+    expect(appleWorkingSetMiB(65536, null)).toBe(Math.floor(65536 * 0.75));
+    expect(appleWorkingSetMiB(65536, 0)).toBe(Math.floor(65536 * 0.75)); // 0 = default, not an override
   });
 });

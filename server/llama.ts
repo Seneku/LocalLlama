@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { getDefaultThreads, getRuntimePaths, type RuntimePaths } from "./paths";
+import { isAppleSilicon } from "./platform";
 import type { CommandPreview, LlamaProfile, ResolvedBackend } from "../src/shared/types";
 
 export interface BuildCommandOptions {
@@ -42,7 +43,10 @@ function resolveBackend(
   if (mode === "cpu") {
     return "CPU";
   }
-  return fileExists(paths.cudaServerPath) ? "CUDA" : "CPU";
+  if (fileExists(paths.cudaServerPath)) {
+    return "CUDA";
+  }
+  return isAppleSilicon() ? "Metal" : "CPU";
 }
 
 export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions = {}): CommandPreview {
@@ -80,7 +84,8 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
   if (profile.mlock) {
     args.push("--mlock");
   }
-  if (backend === "CUDA" && profile.gpuLayers > 0) {
+  // CUDA and Metal both offload layers with -ngl (Metal via unified memory).
+  if (backend !== "CPU" && profile.gpuLayers > 0) {
     args.push("-ngl", String(Math.floor(profile.gpuLayers)));
   }
   if (backend === "CPU" && profile.gpuLayers > 0) {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { extractBenchmarkEnv } from "./benchmarkEnv";
 import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
 import { getDefaultThreads, getRuntimePaths, type RuntimePaths } from "./paths";
+import { isAppleSilicon } from "./platform";
 import { killTree } from "./runtime";
 import type {
   BenchmarkCommandPreview,
@@ -76,7 +77,10 @@ function resolveBackend(
   if (mode === "cpu") {
     return "CPU";
   }
-  return fileExists(paths.cudaBenchPath) ? "CUDA" : "CPU";
+  if (fileExists(paths.cudaBenchPath)) {
+    return "CUDA";
+  }
+  return isAppleSilicon() ? "Metal" : "CPU";
 }
 
 function normalizedSettings(settings?: Partial<BenchmarkSettings>): BenchmarkSettings {
@@ -135,7 +139,8 @@ export function buildBenchmarkCommand(
   if (profile.kvCacheV) {
     args.push("-ctv", profile.kvCacheV);
   }
-  if (backend === "CUDA" && profile.gpuLayers > 0) {
+  // CUDA and Metal both offload layers with -ngl (Metal via unified memory).
+  if (backend !== "CPU" && profile.gpuLayers > 0) {
     args.push("-ngl", String(Math.floor(profile.gpuLayers)));
   }
   if (backend === "CPU" && profile.gpuLayers > 0) {
