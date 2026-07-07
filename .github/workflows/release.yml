@@ -1,0 +1,58 @@
+name: Release
+
+# Build LlamaTuner.exe on a Windows runner and publish a GitHub Release
+# whenever a version tag (v*) is pushed:
+#   git tag v0.2.0 && git push origin v0.2.0
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check and test
+        run: bun test
+
+      - name: Build standalone executable
+        run: bun run package
+
+      - name: Name the artifact for this tag
+        run: cp dist/LlamaTuner.exe "dist/LlamaTuner-${GITHUB_REF_NAME}-win-x64.exe"
+
+      - name: Write release notes
+        run: |
+          cat > notes.md <<'EOF'
+          A single self-contained Windows x64 executable — no install, no Bun, no dependencies. Double-click it and it starts the server and opens the app in your browser.
+
+          You need a local llama.cpp build with `llama-server.exe` / `llama-bench.exe`; point LlamaTuner at it from the **Settings** screen on first run.
+
+          > ⚠️ **The executable is unsigned.** Windows SmartScreen will show *"Windows protected your PC"* the first time you run it — expected for any unsigned app. Click **More info → Run anyway**, or build it yourself from source with `bun run package`.
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/LlamaTuner-${GITHUB_REF_NAME}-win-x64.exe" \
+            --title "LlamaTuner ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --verify-tag

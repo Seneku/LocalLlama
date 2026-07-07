@@ -85,6 +85,15 @@ bunx tsc --noEmit # type-check
 
 Your local `data/` (profiles, benchmark history, settings) is git-ignored, so it stays on your machine.
 
+### Releasing
+
+Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml), which builds the executable on a Windows runner, runs the tests, and publishes a GitHub Release with the exe attached:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
 ## License
 
 MIT
