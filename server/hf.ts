@@ -198,8 +198,8 @@ export interface RecommendedResult {
 
 export async function getRecommendedModels(hardware: HardwareInfo): Promise<RecommendedResult> {
   const maxParamsB = recommendedMaxParamsB(hardware);
-  // Newest first; fetch extra so filtering still leaves a full page.
-  const raw = await searchModels("", "createdAt", 80);
+  // Most popular first; fetch extra so the size filter still leaves a full page.
+  const raw = await searchModels("", "downloads", 80);
   const models = raw.filter((model) => isRecommendable(model, maxParamsB)).slice(0, 30);
   return { models, maxParamsB };
 }

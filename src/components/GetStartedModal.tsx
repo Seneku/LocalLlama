@@ -413,8 +413,8 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
 
       {view === "recommended" ? (
         <div className="recommend-note">
-          Newest GGUF chat models that should fit your {gpu ? gpu.name : "hardware"}
-          {maxParamsB ? <> — up to ~{maxParamsB}B params at a Q4 quant</> : null}. Sorted by most recent.
+          Popular GGUF chat models that should fit your {gpu ? gpu.name : "hardware"}
+          {maxParamsB ? <> — up to ~{maxParamsB}B params at a Q4 quant</> : null}. Sorted by downloads.
         </div>
       ) : null}
 
