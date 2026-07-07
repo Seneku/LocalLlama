@@ -1,4 +1,4 @@
-import { availableParallelism } from "node:os";
+import { availableParallelism, homedir } from "node:os";
 import path from "node:path";
 
 import { getSettings } from "./settings";
@@ -13,7 +13,13 @@ export interface RuntimePaths {
   dataPath: string;
 }
 
-const DEFAULT_LLAMA_ROOT = "E:\\Projects\\llama.cpp";
+// llama.cpp binaries carry a .exe suffix only on Windows.
+const EXE = process.platform === "win32" ? ".exe" : "";
+const LLAMA_SERVER = `llama-server${EXE}`;
+const LLAMA_BENCH = `llama-bench${EXE}`;
+
+const DEFAULT_LLAMA_ROOT =
+  process.platform === "win32" ? "E:\\Projects\\llama.cpp" : path.join(homedir(), "llama.cpp");
 
 // Precedence: saved settings > environment variable > default derived from llamaRoot.
 export function getRuntimePaths(): RuntimePaths {
@@ -26,19 +32,19 @@ export function getRuntimePaths(): RuntimePaths {
     cudaServerPath:
       settings.cudaServerPath ||
       process.env.LOCALLLAMA_CUDA_SERVER ||
-      path.join(llamaRoot, "dist-cuda", "llama-server.exe"),
+      path.join(llamaRoot, "dist-cuda", LLAMA_SERVER),
     cpuServerPath:
       settings.cpuServerPath ||
       process.env.LOCALLLAMA_CPU_SERVER ||
-      path.join(llamaRoot, "build", "bin", "llama-server.exe"),
+      path.join(llamaRoot, "build", "bin", LLAMA_SERVER),
     cudaBenchPath:
       settings.cudaBenchPath ||
       process.env.LOCALLLAMA_CUDA_BENCH ||
-      path.join(llamaRoot, "dist-cuda", "llama-bench.exe"),
+      path.join(llamaRoot, "dist-cuda", LLAMA_BENCH),
     cpuBenchPath:
       settings.cpuBenchPath ||
       process.env.LOCALLLAMA_CPU_BENCH ||
-      path.join(llamaRoot, "build", "bin", "llama-bench.exe"),
+      path.join(llamaRoot, "build", "bin", LLAMA_BENCH),
     dataPath
   };
 }

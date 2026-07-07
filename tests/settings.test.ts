@@ -35,10 +35,12 @@ describe("settings", () => {
     const root = path.join(tempDir, "llama.cpp");
     saveSettings({ llamaRoot: root });
 
+    // Binaries are suffixed with .exe only on Windows.
+    const exe = process.platform === "win32" ? ".exe" : "";
     const paths = getRuntimePaths();
     expect(paths.llamaRoot).toBe(root);
-    expect(paths.cudaServerPath).toBe(path.join(root, "dist-cuda", "llama-server.exe"));
-    expect(paths.cpuBenchPath).toBe(path.join(root, "build", "bin", "llama-bench.exe"));
+    expect(paths.cudaServerPath).toBe(path.join(root, "dist-cuda", `llama-server${exe}`));
+    expect(paths.cpuBenchPath).toBe(path.join(root, "build", "bin", `llama-bench${exe}`));
   });
 
   test("explicit binary overrides beat derived defaults", () => {

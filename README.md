@@ -2,13 +2,25 @@
 
 A local web UI for tuning, launching, and benchmarking [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` configurations. Build named profiles, see the exact command before you run it, get a GGUF-accurate VRAM estimate for your GPU, run `llama-bench` sweeps, and compare the results — without hand-editing `.cmd` files.
 
-> **Platform:** Windows-focused. LocalLlama shells out to `nvidia-smi`, `taskkill`, and `.exe` binaries. It runs against a local llama.cpp build you already have.
+> **Platform:** Windows, Linux, and macOS. LocalLlama runs against a local llama.cpp build you already have. GPU/VRAM detection uses `nvidia-smi` (Windows & Linux with an NVIDIA GPU); on macOS the estimator falls back to system-RAM figures for now.
 
 ## Download
 
-Grab the latest **`LocalLlama.exe`** from the [Releases page](https://github.com/Seneku/LocalLlama/releases) (Windows x64). It's a single self-contained executable — no install, no Bun, no dependencies. Double-click it and it starts the server and opens the app in your browser. You still need a local [llama.cpp](https://github.com/ggml-org/llama.cpp) build; point LocalLlama at it from the **Settings** screen on first run.
+Grab the binary for your platform from the [Releases page](https://github.com/Seneku/LocalLlama/releases). Each is a single self-contained executable — no install, no Bun, no dependencies. Run it and it starts the server and opens the app in your browser. You still need a local [llama.cpp](https://github.com/ggml-org/llama.cpp) build; point LocalLlama at it from the **Settings** screen on first run.
 
-> ⚠️ **The executable is unsigned.** Because it isn't code-signed, Windows SmartScreen will show *"Windows protected your PC"* the first time you run it. This is expected for any unsigned app — click **More info → Run anyway**. If you'd rather not trust a prebuilt binary, [build it yourself from source](#package-as-a-standalone-executable) with `bun run package` — the result is byte-for-byte reproducible from this repo.
+| Platform | Asset |
+| --- | --- |
+| Windows x64 | `LocalLlama-*-win-x64.exe` |
+| Linux x64 | `LocalLlama-*-linux-x64` |
+| macOS (Apple Silicon) | `LocalLlama-*-macos-arm64` |
+| macOS (Intel) | `LocalLlama-*-macos-x64` |
+
+> ⚠️ **The binaries are unsigned.** First-run steps per OS:
+> - **Windows** — SmartScreen shows *"Windows protected your PC"*: click **More info → Run anyway**.
+> - **macOS** — Gatekeeper blocks unsigned apps. Clear the quarantine flag with `xattr -d com.apple.quarantine ./LocalLlama-*-macos-*` (or right-click → **Open** once), then `chmod +x` it.
+> - **Linux** — make it executable: `chmod +x ./LocalLlama-*-linux-x64`, then run it.
+>
+> If you'd rather not trust a prebuilt binary, [build it yourself from source](#package-as-a-standalone-executable) with `bun run package` (host platform) or `bun run package:all` (all platforms) — the result is reproducible from this repo.
 
 ## Features
 
@@ -23,7 +35,7 @@ Grab the latest **`LocalLlama.exe`** from the [Releases page](https://github.com
 ## Requirements
 
 - [Bun](https://bun.sh) (the runtime, package manager, and test runner)
-- A local llama.cpp build with `llama-server.exe` and `llama-bench.exe`
+- A local llama.cpp build with `llama-server` / `llama-bench` (`.exe` on Windows)
 - Optional: an NVIDIA GPU with `nvidia-smi` on `PATH` for VRAM fit estimates (the app still works CPU-only without it)
 
 ## Getting started
@@ -49,10 +61,11 @@ bun run start     # serve the built app + API from one process (port 4187)
 ### Package as a standalone executable
 
 ```sh
-bun run package   # builds the UI, inlines it, and compiles dist/LocalLlama.exe
+bun run package       # builds the UI, inlines it, and compiles a binary for THIS platform
+bun run package:all   # cross-compiles binaries for Windows, Linux, and macOS (arm64 + x64)
 ```
 
-This produces a single **`LocalLlama.exe`** (~110 MB — it bundles the Bun runtime and the whole UI). It needs no installed Bun, no `dist/` folder, and no source. Double-click it (or run it from a terminal) and it:
+`bun run package` produces a single self-contained binary (~110 MB — it bundles the Bun runtime and the whole UI) in `dist/`. `bun run package:all` cross-compiles all four release targets from any host (`dist/LocalLlama-win-x64.exe`, `-linux-x64`, `-macos-arm64`, `-macos-x64`). It needs no installed Bun, no `dist/` folder, and no source. Run it and it:
 
 1. starts the API + UI server on port `4187` (falls back to the next free port if taken),
 2. opens the app in your default browser.
@@ -89,11 +102,11 @@ Your local `data/` (profiles, benchmark history, settings) is git-ignored, so it
 
 ### Releasing
 
-Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml), which builds the executable on a Windows runner, runs the tests, and publishes a GitHub Release with the exe attached:
+Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml), which runs the tests, cross-compiles the Windows/Linux/macOS binaries on a Linux runner, and publishes a GitHub Release with all four attached:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 ## License

@@ -1,13 +1,14 @@
 name: Release
 
-# Build LocalLlama.exe on a Windows runner and publish a GitHub Release
-# whenever a version tag (v*) is pushed:
-#   git tag v0.2.0 && git push origin v0.2.0
+# Cross-compile the standalone binaries for Windows, Linux and macOS from a
+# single Linux runner (Bun cross-compiles all targets) and publish a GitHub
+# Release whenever a version tag (v*) is pushed:
+#   git tag v0.3.0 && git push origin v0.3.0
 on:
   push:
     tags:
       - "v*"
-  # Manual runs build + test the executable on CI without publishing a release
+  # Manual runs build + test the executables on CI without publishing a release
   # (the release steps below are guarded to tag pushes).
   workflow_dispatch:
 
@@ -16,10 +17,7 @@ permissions:
 
 jobs:
   build-release:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -31,25 +29,41 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type-check and test
+      - name: Test
         run: bun test
 
-      - name: Build standalone executable
-        run: bun run package
+      - name: Compile standalone binaries (win / linux / macOS)
+        run: bun run package:all
 
-      - name: Name the artifact for this tag
+      - name: Name the artifacts for this tag
         if: startsWith(github.ref, 'refs/tags/')
-        run: cp dist/LocalLlama.exe "dist/LocalLlama-${GITHUB_REF_NAME}-win-x64.exe"
+        run: |
+          cp dist/LocalLlama-win-x64.exe "dist/LocalLlama-${GITHUB_REF_NAME}-win-x64.exe"
+          cp dist/LocalLlama-linux-x64 "dist/LocalLlama-${GITHUB_REF_NAME}-linux-x64"
+          cp dist/LocalLlama-macos-arm64 "dist/LocalLlama-${GITHUB_REF_NAME}-macos-arm64"
+          cp dist/LocalLlama-macos-x64 "dist/LocalLlama-${GITHUB_REF_NAME}-macos-x64"
 
       - name: Write release notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           cat > notes.md <<'EOF'
-          A single self-contained Windows x64 executable — no install, no Bun, no dependencies. Double-click it and it starts the server and opens the app in your browser.
+          Self-contained executables — no install, no Bun, no dependencies. Run it and it starts the server and opens the app in your browser.
 
-          You need a local llama.cpp build with `llama-server.exe` / `llama-bench.exe`; point LocalLlama at it from the **Settings** screen on first run.
+          | Platform | Download |
+          | --- | --- |
+          | Windows x64 | `LocalLlama-*-win-x64.exe` |
+          | Linux x64 | `LocalLlama-*-linux-x64` |
+          | macOS (Apple Silicon) | `LocalLlama-*-macos-arm64` |
+          | macOS (Intel) | `LocalLlama-*-macos-x64` |
 
-          > ⚠️ **The executable is unsigned.** Windows SmartScreen will show *"Windows protected your PC"* the first time you run it — expected for any unsigned app. Click **More info → Run anyway**, or build it yourself from source with `bun run package`.
+          You need a local llama.cpp build with `llama-server` / `llama-bench` (`.exe` on Windows); point LocalLlama at it from the **Settings** screen on first run.
+
+          **First-run notes (the binaries are unsigned):**
+          - **Windows** — SmartScreen shows *"Windows protected your PC"*: click **More info → Run anyway**.
+          - **macOS** — Gatekeeper blocks unsigned apps. Run `xattr -d com.apple.quarantine ./LocalLlama-*-macos-*` (or right-click → **Open**), then `chmod +x` it.
+          - **Linux** — `chmod +x ./LocalLlama-*-linux-x64`, then run it.
+
+          > GPU/VRAM detection currently uses `nvidia-smi` (Windows & Linux NVIDIA). On macOS the estimator falls back to system-RAM figures — Apple-Silicon Metal/unified-memory support is planned. Build from source with `bun run package:all`.
           EOF
 
       - name: Publish release
@@ -59,6 +73,9 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             "dist/LocalLlama-${GITHUB_REF_NAME}-win-x64.exe" \
+            "dist/LocalLlama-${GITHUB_REF_NAME}-linux-x64" \
+            "dist/LocalLlama-${GITHUB_REF_NAME}-macos-arm64" \
+            "dist/LocalLlama-${GITHUB_REF_NAME}-macos-x64" \
             --title "LocalLlama ${GITHUB_REF_NAME}" \
             --notes-file notes.md \
             --verify-tag

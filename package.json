@@ -10,6 +10,11 @@
     "start": "bun server/index.ts",
     "start:standalone": "bun run build:standalone && bun run server/standalone.ts",
     "package": "bun run build:standalone && bun build --compile --minify --outfile dist/LocalLlama.exe server/standalone.ts",
+    "package:win": "bun build --compile --minify --target=bun-windows-x64 --outfile dist/LocalLlama-win-x64.exe server/standalone.ts",
+    "package:linux": "bun build --compile --minify --target=bun-linux-x64 --outfile dist/LocalLlama-linux-x64 server/standalone.ts",
+    "package:macos-arm64": "bun build --compile --minify --target=bun-darwin-arm64 --outfile dist/LocalLlama-macos-arm64 server/standalone.ts",
+    "package:macos-x64": "bun build --compile --minify --target=bun-darwin-x64 --outfile dist/LocalLlama-macos-x64 server/standalone.ts",
+    "package:all": "bun run build:standalone && bun run package:win && bun run package:linux && bun run package:macos-arm64 && bun run package:macos-x64",
     "restart": "scripts/restart-localllama.cmd",
     "test": "bun test"
   },

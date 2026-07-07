@@ -460,7 +460,11 @@ export async function getHardwareInfo(): Promise<HardwareInfo> {
 
   const gpus: GpuInfo[] = [];
   try {
-    const { stdout } = await execFileAsync("nvidia-smi.exe", [
+    // nvidia-smi is `nvidia-smi.exe` on Windows, `nvidia-smi` elsewhere. On
+    // machines without an NVIDIA GPU (incl. Apple Silicon) this throws and we
+    // fall back to system-RAM-only estimates.
+    const nvidiaSmi = process.platform === "win32" ? "nvidia-smi.exe" : "nvidia-smi";
+    const { stdout } = await execFileAsync(nvidiaSmi, [
       "--query-gpu=name,memory.total,memory.used,memory.free",
       "--format=csv,noheader,nounits"
     ]);
