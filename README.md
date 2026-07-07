@@ -4,6 +4,12 @@ A local web UI for tuning, launching, and benchmarking [llama.cpp](https://githu
 
 > **Platform:** Windows-focused. LlamaTuner shells out to `nvidia-smi`, `taskkill`, and `.exe` binaries. It runs against a local llama.cpp build you already have.
 
+## Download
+
+Grab the latest **`LlamaTuner.exe`** from the [Releases page](https://github.com/Seneku/LlamaTuner/releases) (Windows x64). It's a single self-contained executable — no install, no Bun, no dependencies. Double-click it and it starts the server and opens the app in your browser. You still need a local [llama.cpp](https://github.com/ggml-org/llama.cpp) build; point LlamaTuner at it from the **Settings** screen on first run.
+
+> ⚠️ **The executable is unsigned.** Because it isn't code-signed, Windows SmartScreen will show *"Windows protected your PC"* the first time you run it. This is expected for any unsigned app — click **More info → Run anyway**. If you'd rather not trust a prebuilt binary, [build it yourself from source](#package-as-a-standalone-executable) with `bun run package` — the result is byte-for-byte reproducible from this repo.
+
 ## Features
 
 - **Profiles** — save reusable server configs (model, context, GPU layers, KV-cache quant, parallel slots, speculative decoding, etc.), with a live-updating preview of the exact `llama-server` command.
