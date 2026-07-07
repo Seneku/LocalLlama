@@ -13,6 +13,7 @@ import type {
   MemoryEstimate,
   ModelFilesResponse,
   ModelSearchResult,
+  RecommendedResponse,
   RuntimeConfig,
   RuntimeLog,
   RuntimeStatus,
@@ -100,6 +101,7 @@ export const api = {
   llamaCppRelease: () => request<LlamaCppRelease>("/api/llamacpp/latest"),
   searchModels: (query: string, sort = "downloads") =>
     request<ModelSearchResult[]>(`/api/models/search?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(sort)}`),
+  recommendedModels: () => request<RecommendedResponse>("/api/models/recommended"),
   modelFiles: (id: string) => request<ModelFilesResponse>(`/api/models/files?id=${encodeURIComponent(id)}`),
   startDownload: (id: string, filename: string) =>
     request<DownloadStatus>("/api/models/download", {

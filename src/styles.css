@@ -1681,6 +1681,12 @@ dd.bad {
   font-size: var(--font-sm);
 }
 
+.recommend-note {
+  color: var(--text-dim);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
 .hw-line svg {
   flex: none;
   margin-top: 2px;

@@ -6,7 +6,9 @@ import {
   coarseFit,
   normalizeSearch,
   normalizeTree,
+  parseParamsB,
   parseQuant,
+  recommendedMaxParamsB,
   resolveDownloadUrl
 } from "../server/hf";
 import type { HardwareInfo } from "../src/shared/types";
@@ -106,6 +108,30 @@ describe("classifyRelease", () => {
     expect(release.tag).toBe("b9894");
     expect(release.winAssets).toHaveLength(2);
     expect(release.winAssets.map((asset) => asset.kind).sort()).toEqual(["cuda", "cudart"]);
+  });
+});
+
+describe("parseParamsB", () => {
+  test("extracts the largest billions-of-params token", () => {
+    expect(parseParamsB("bartowski/Meta-Llama-3.1-8B-Instruct-GGUF")).toBe(8);
+    expect(parseParamsB("unsloth/gemma-4-12b-it-GGUF")).toBe(12);
+    expect(parseParamsB("Qwen/Qwen3-30B-A3B-GGUF")).toBe(30); // total, not active
+    expect(parseParamsB("org/TinyModel-0.5B-GGUF")).toBe(0.5);
+    expect(parseParamsB("org/SmolLM2-135M-GGUF")).toBeNull(); // M, not B
+    expect(parseParamsB("org/some-random-model-GGUF")).toBeNull();
+  });
+});
+
+describe("recommendedMaxParamsB", () => {
+  test("scales with total VRAM (12 GB card -> ~16B)", () => {
+    expect(recommendedMaxParamsB(hardware(6000, 12281))).toBe(16);
+    expect(recommendedMaxParamsB(hardware(3000, 8192))).toBeLessThan(12);
+    expect(recommendedMaxParamsB(hardware(20000, 24576))).toBeGreaterThan(30);
+  });
+
+  test("falls back to system RAM with no GPU", () => {
+    const cpuOnly = { totalRamMiB: 32768, freeRamMiB: 16000, gpus: [] };
+    expect(recommendedMaxParamsB(cpuOnly)).toBeGreaterThan(20);
   });
 });
 

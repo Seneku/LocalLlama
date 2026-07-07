@@ -161,6 +161,49 @@ export function resolveDownloadUrl(id: string, filename: string): string {
   return `${HF_HOST}/${id}/resolve/main/${filename}`;
 }
 
+// Largest number-of-billions token in the id (e.g. "Qwen3-30B-A3B" -> 30,
+// "Llama-3.1-8B" -> 8, "gemma-4-12b-it" -> 12). Returns null if none found.
+export function parseParamsB(id: string): number | null {
+  const matches = [...id.matchAll(/(\d+(?:\.\d+)?)\s*b\b/giu)]
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0 && value < 2000);
+  return matches.length ? Math.max(...matches) : null;
+}
+
+// Roughly the biggest model (in billions of params) that fits at a common
+// Q4_K_M quant: ~0.62 GiB of weights per 1B params, plus a reserve for the
+// OS and KV/compute. Uses total VRAM when a GPU is present, else system RAM.
+const GIB_PER_B_Q4 = 0.62;
+export function recommendedMaxParamsB(hardware: HardwareInfo): number {
+  const gpu = hardware.gpus[0] ?? null;
+  const budgetMiB = gpu?.totalMiB ?? gpu?.freeMiB ?? hardware.totalRamMiB;
+  const reserveGiB = gpu ? 2 : 3;
+  const usableGiB = Math.max(0, budgetMiB / 1024 - reserveGiB);
+  return Math.max(1, Math.round(usableGiB / GIB_PER_B_Q4));
+}
+
+function isRecommendable(model: ModelSearchResult, maxParamsB: number): boolean {
+  // Skip embedding / non-chat repos.
+  if (model.pipelineTag && model.pipelineTag !== "text-generation") {
+    return false;
+  }
+  const params = parseParamsB(model.id);
+  return params === null || params <= maxParamsB;
+}
+
+export interface RecommendedResult {
+  models: ModelSearchResult[];
+  maxParamsB: number;
+}
+
+export async function getRecommendedModels(hardware: HardwareInfo): Promise<RecommendedResult> {
+  const maxParamsB = recommendedMaxParamsB(hardware);
+  // Newest first; fetch extra so filtering still leaves a full page.
+  const raw = await searchModels("", "createdAt", 80);
+  const models = raw.filter((model) => isRecommendable(model, maxParamsB)).slice(0, 30);
+  return { models, maxParamsB };
+}
+
 // ---- network ----
 
 let releaseCache: { at: number; release: LlamaCppRelease } | null = null;
@@ -180,7 +223,7 @@ export async function getLatestLlamaCppRelease(now: number = Date.now()): Promis
   return release;
 }
 
-export async function searchModels(query: string, sort = "downloads"): Promise<ModelSearchResult[]> {
+export async function searchModels(query: string, sort = "downloads", limit = 30): Promise<ModelSearchResult[]> {
   const url = new URL(`${HF_API}/models`);
   url.searchParams.set("filter", "gguf");
   if (query.trim()) {
@@ -188,7 +231,7 @@ export async function searchModels(query: string, sort = "downloads"): Promise<M
   }
   url.searchParams.set("sort", sort);
   url.searchParams.set("direction", "-1");
-  url.searchParams.set("limit", "30");
+  url.searchParams.set("limit", String(limit));
   const response = await fetch(url, { headers: hfHeaders() });
   if (!response.ok) {
     throw new HttpProxyError(response.status, `Hugging Face search returned ${response.status}`);

@@ -113,6 +113,13 @@ export interface FavoriteModel extends ModelSearchResult {
   addedAt: string;
 }
 
+export interface RecommendedResponse {
+  models: ModelSearchResult[];
+  hardware: HardwareInfo;
+  /** Largest model (billions of params) expected to fit at a Q4 quant. */
+  maxParamsB: number;
+}
+
 export interface ModelFile {
   filename: string;
   sizeBytes: number;

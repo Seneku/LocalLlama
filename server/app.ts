@@ -7,7 +7,7 @@ import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
 import { DownloadManager } from "./downloadManager";
 import { createFavoritesStore, type FavoritesStore } from "./favoritesStore";
 import { estimateProfileMemory, getHardwareInfo } from "./estimate";
-import { getLatestLlamaCppRelease, HttpProxyError, listModelFiles, searchModels } from "./hf";
+import { getLatestLlamaCppRelease, getRecommendedModels, HttpProxyError, listModelFiles, searchModels } from "./hf";
 import { buildCommand } from "./llama";
 import { createProfileStore, type ProfileStore } from "./profileStore";
 import { createRuntimeConfig, getModelsDir } from "./paths";
@@ -137,6 +137,13 @@ async function routeApi(
   if (request.method === "GET" && pathname === "/api/models/search") {
     const results = await searchModels(query.get("q") ?? "", query.get("sort") ?? "downloads");
     sendJson(response, 200, results);
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/recommended") {
+    const hardware = await getHardwareInfo();
+    const { models, maxParamsB } = await getRecommendedModels(hardware);
+    sendJson(response, 200, { models, hardware, maxParamsB });
     return;
   }
 

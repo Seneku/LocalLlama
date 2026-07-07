@@ -7,6 +7,7 @@ import {
   Loader,
   Package,
   Search,
+  Sparkles,
   Star,
   Trash2,
   X,
@@ -246,7 +247,9 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   const [download, setDownload] = useState<DownloadStatus | null>(null);
   const [local, setLocal] = useState<LocalModel[]>([]);
   const [favorites, setFavorites] = useState<FavoriteModel[]>([]);
-  const [view, setView] = useState<"search" | "favorites">("search");
+  const [recommended, setRecommended] = useState<ModelSearchResult[]>([]);
+  const [maxParamsB, setMaxParamsB] = useState<number | null>(null);
+  const [view, setView] = useState<"recommended" | "search" | "favorites">("recommended");
 
   const runSearch = useCallback(
     async (term: string) => {
@@ -266,8 +269,16 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
     api.localModels().then(setLocal).catch(() => undefined);
   }, []);
 
-  // Initial popular list + local models + saved favourites.
+  // Initial hardware-tailored recommendations + popular search + favourites + local.
   useEffect(() => {
+    api
+      .recommendedModels()
+      .then((response) => {
+        setRecommended(response.models);
+        setMaxParamsB(response.maxParamsB);
+        setHardware(response.hardware);
+      })
+      .catch(() => undefined);
     void runSearch("");
     refreshLocal();
     api.favorites().then(setFavorites).catch(() => undefined);
@@ -351,6 +362,7 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   }
 
   const gpu = hardware?.gpus[0];
+  const listModels = view === "recommended" ? recommended : view === "favorites" ? favorites : results;
 
   return (
     <div className="model-browser">
@@ -358,6 +370,7 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         className="model-search"
         onSubmit={(event) => {
           event.preventDefault();
+          setView("search");
           void runSearch(query);
         }}
       >
@@ -385,6 +398,10 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
       ) : null}
 
       <div className="log-toolbar model-view-toggle">
+        <button className={`chip ${view === "recommended" ? "active" : ""}`} onClick={() => setView("recommended")}>
+          <Sparkles size={13} />
+          Recommended
+        </button>
         <button className={`chip ${view === "search" ? "active" : ""}`} onClick={() => setView("search")}>
           Search results
         </button>
@@ -394,18 +411,27 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         </button>
       </div>
 
+      {view === "recommended" ? (
+        <div className="recommend-note">
+          Newest GGUF chat models that should fit your {gpu ? gpu.name : "hardware"}
+          {maxParamsB ? <> — up to ~{maxParamsB}B params at a Q4 quant</> : null}. Sorted by most recent.
+        </div>
+      ) : null}
+
       <div className="model-columns">
         <div className="model-list">
-          {(view === "favorites" ? favorites : results).length === 0 ? (
+          {listModels.length === 0 ? (
             <div className="empty">
               {view === "favorites"
                 ? "No favourites yet — tap the star on a model to save it here."
-                : searching
-                  ? "Searching…"
-                  : "No models found."}
+                : view === "recommended"
+                  ? "No recommendations right now."
+                  : searching
+                    ? "Searching…"
+                    : "No models found."}
             </div>
           ) : (
-            (view === "favorites" ? favorites : results).map((model) => (
+            listModels.map((model) => (
               <div key={model.id} className={`model-row-wrap ${selected?.id === model.id ? "active" : ""}`}>
                 <button className="model-row" title={model.id} onClick={() => selectModel(model)}>
                   <span className="model-name">
