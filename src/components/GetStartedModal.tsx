@@ -395,6 +395,22 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         </div>
 
         <div className="model-files">
+          {selected ? (
+            <div className="files-header">
+              <span className="fh-name" title={selected.id}>
+                {selected.id}
+              </span>
+              <a
+                className="hf-link"
+                href={`https://huggingface.co/${selected.id}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Open this model's page on Hugging Face"
+              >
+                <ExternalLink size={13} /> Hugging Face
+              </a>
+            </div>
+          ) : null}
           {!selected ? (
             <div className="empty">Select a model to see its GGUF files.</div>
           ) : filesLoading ? (
