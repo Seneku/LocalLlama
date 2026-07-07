@@ -1,45 +1,20 @@
-import {
-  Activity,
-  Coffee,
-  Copy,
-  Cpu,
-  Database,
-  FolderCog,
-  Package,
-  Play,
-  Plug,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Save,
-  Server,
-  Settings,
-  Square,
-  Terminal,
-  Trash2
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FolderCog, Package } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "./api";
 import { BenchmarkDashboard } from "./components/BenchmarkDashboard";
 import { ConnectToolsModal } from "./components/ConnectToolsModal";
-import { LogView } from "./components/LogView";
 import { GetStartedModal } from "./components/GetStartedModal";
-import { RequirementsPanel } from "./components/RequirementsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ToastStack, useToasts } from "./components/Toasts";
-import { ConfirmButton, CopyButton, NumberField, SelectField, TextField, ToggleField } from "./components/ui";
+import { TopBar, type AppView } from "./components/TopBar";
+import { ServerView } from "./views/ServerView";
 import type {
-  BackendMode,
   CommandPreview,
-  KvCacheType,
   LlamaProfile,
-  ReasoningMode,
   RuntimeConfig,
   RuntimeLog,
-  RuntimeStatus,
-  SpecType,
-  ThreadsMode
+  RuntimeStatus
 } from "./shared/types";
 
 const emptyStatus: RuntimeStatus = {
@@ -56,6 +31,17 @@ const emptyStatus: RuntimeStatus = {
   command: null
 };
 
+const VIEW_STORAGE_KEY = "localllama.view";
+
+function initialView(): AppView {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    return stored === "benchmarks" ? "benchmarks" : "server";
+  } catch {
+    return "server";
+  }
+}
+
 function cloneProfile(profile: LlamaProfile): LlamaProfile {
   return JSON.parse(JSON.stringify(profile)) as LlamaProfile;
 }
@@ -65,11 +51,6 @@ function createProfileFrom(base: LlamaProfile, name: string): LlamaProfile {
   copy.id = "";
   copy.name = name;
   return copy;
-}
-
-function modelFileName(modelPath: string): string {
-  const parts = modelPath.split(/[\\/]/);
-  return parts[parts.length - 1] || modelPath;
 }
 
 function formatUptime(startedAt: string | null): string | null {
@@ -90,6 +71,7 @@ function formatUptime(startedAt: string | null): string | null {
 }
 
 export default function App() {
+  const [view, setView] = useState<AppView>(initialView);
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [profiles, setProfiles] = useState<LlamaProfile[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -124,6 +106,14 @@ export default function App() {
   useEffect(() => {
     void loadInitial();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {
+      // Storage unavailable (private mode); the view simply won't persist.
+    }
+  }, [view]);
 
   useEffect(() => {
     if (!selectedProfile) {
@@ -357,58 +347,29 @@ export default function App() {
     );
   }
 
+  function selectProfile(profile: LlamaProfile) {
+    if (profile.id === selectedId) {
+      // Re-selecting the same profile restores it (e.g. after "+" starts a new draft).
+      setDraft(cloneProfile(profile));
+    } else {
+      setSelectedId(profile.id);
+    }
+  }
+
   const uptime = status.state === "running" ? formatUptime(status.startedAt) : null;
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>LocalLlama</h1>
-          <div className="subline">
-            <span className="path">{config?.llamaRoot ?? "Loading llama.cpp path"}</span>
-            <span className={config?.detected.cudaServer ? "pill ok" : "pill muted"}>CUDA</span>
-            <span className={config?.detected.cpuServer ? "pill ok" : "pill muted"}>CPU</span>
-            <span className={config?.detected.cudaBench ? "pill ok" : "pill muted"}>CUDA bench</span>
-            <span className={config?.detected.cpuBench ? "pill ok" : "pill muted"}>CPU bench</span>
-          </div>
-        </div>
-        <div className="status-strip">
-          <span className={`state-chip ${status.state}`}>
-            <i className={`runtime-dot ${running ? "live" : ""}`} />
-            {status.state}
-          </span>
-          {status.profileName ? <span className="status-name">{status.profileName}</span> : null}
-          {uptime ? <span className="status-uptime">up {uptime}</span> : null}
-          {status.health === "unreachable" ? <span className="state-chip unreachable">unreachable</span> : null}
-          <button
-            className="icon-button"
-            title="Get started — install llama.cpp & download models"
-            onClick={() => setGetStartedTab("models")}
-          >
-            <Package size={16} />
-          </button>
-          <a
-            className="bmc-button"
-            href="https://www.buymeacoffee.com/seneku"
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Support LocalLlama — buy me a coffee"
-          >
-            <Coffee size={15} />
-            <span>Buy me a coffee</span>
-          </a>
-          <button
-            className="icon-button"
-            title="Connect to tools — OpenCode, Cline, Continue, Aider…"
-            onClick={() => setConnectOpen(true)}
-          >
-            <Plug size={16} />
-          </button>
-          <button className="icon-button" title="Settings" onClick={() => setSettingsOpen(true)}>
-            <Settings size={16} />
-          </button>
-        </div>
-      </header>
+      <TopBar
+        view={view}
+        status={status}
+        running={running}
+        uptime={uptime}
+        onViewChange={setView}
+        onOpenGetStarted={() => setGetStartedTab("models")}
+        onOpenConnect={() => setConnectOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       <ToastStack toasts={toasts} onDismiss={dismiss} />
       <SettingsModal
@@ -452,378 +413,51 @@ export default function App() {
         </div>
       ) : null}
 
-      <section className="workspace">
-        <aside className="profiles-panel">
-          <div className="panel-title">
-            <Server size={18} />
-            <span>Profiles</span>
-            <button
-              className="icon-button"
-              title="New profile (based on the current one)"
-              onClick={() => draft && setDraft(createProfileFrom(draft, "New Profile"))}
-              disabled={!draft || busy}
-            >
-              <Plus size={17} />
-            </button>
-          </div>
-          <div className="profile-list">
-            {profiles.map((profile) => {
-              const active = profile.id === selectedId && Boolean(draft?.id);
-              const isLive = running && status.profileId === profile.id;
-              return (
-                <button
-                  key={profile.id}
-                  className={`profile-card ${active ? "active" : ""}`}
-                  onClick={() => {
-                    if (profile.id === selectedId) {
-                      // Re-selecting the same profile restores it (e.g. after "+" starts a new draft).
-                      setDraft(cloneProfile(profile));
-                    } else {
-                      setSelectedId(profile.id);
-                    }
-                  }}
-                >
-                  <span className="profile-name">
-                    {profile.name}
-                    {isLive ? <i className="runtime-dot live" title="Running" /> : null}
-                    {active && isDirty ? <i className="dirty-dot" title="Unsaved changes" /> : null}
-                  </span>
-                  <small>{modelFileName(profile.modelPath)}</small>
-                  <span className="profile-meta">
-                    <em>{profile.backendMode}</em>
-                    <em>{profile.contextSize.toLocaleString()} ctx</em>
-                  </span>
-                </button>
-              );
-            })}
-            {draft && !draft.id ? (
-              <div className="profile-card active unsaved">
-                <span className="profile-name">
-                  {draft.name || "New Profile"}
-                  <i className="dirty-dot" title="Not saved yet" />
-                </span>
-                <small>unsaved</small>
-              </div>
-            ) : null}
-          </div>
-        </aside>
-
-        <section className="editor-panel">
-          {draft ? (
-            <>
-              <div className="panel-title editor-title">
-                <Cpu size={18} />
-                <span>Profile Editor</span>
-                {isDirty ? <span className="dirty-chip">unsaved changes</span> : null}
-                <div className="button-row">
-                  {isDirty && draft.id ? (
-                    <button className="ghost" title="Discard changes" onClick={revertDraft} disabled={busy}>
-                      <RotateCcw size={16} />
-                      Revert
-                    </button>
-                  ) : null}
-                  <button title="Save profile (Ctrl+S)" onClick={saveDraft} disabled={busy || !isDirty}>
-                    <Save size={16} />
-                    Save
-                  </button>
-                  <button
-                    title="Duplicate profile"
-                    onClick={() => setDraft(createProfileFrom(draft, `${draft.name} Copy`))}
-                    disabled={busy}
-                  >
-                    <Copy size={16} />
-                    Duplicate
-                  </button>
-                  <ConfirmButton
-                    className="danger"
-                    title="Delete profile"
-                    confirmLabel="Delete?"
-                    onConfirm={deleteSelected}
-                    disabled={busy || profiles.length <= 1 || !draft.id}
-                  >
-                    <Trash2 size={16} />
-                    Delete
-                  </ConfirmButton>
-                </div>
-              </div>
-
-              <FormSection title="Model">
-                <TextField label="Name" value={draft.name} onChange={(value) => updateDraft("name", value)} />
-                <TextField
-                  label="Model alias"
-                  value={draft.modelAlias}
-                  placeholder="optional"
-                  onChange={(value) => updateDraft("modelAlias", value)}
-                />
-                <TextField
-                  label="Model path"
-                  value={draft.modelPath}
-                  wide
-                  placeholder="E:\Models\model.gguf"
-                  onChange={(value) => updateDraft("modelPath", value)}
-                />
-                <TextField
-                  label="Description"
-                  value={draft.description}
-                  wide
-                  placeholder="What is this profile for?"
-                  onChange={(value) => updateDraft("description", value)}
-                />
-              </FormSection>
-
-              <FormSection title="Server">
-                <SelectField<BackendMode>
-                  label="Backend"
-                  value={draft.backendMode}
-                  options={["auto", "cuda", "cpu"]}
-                  onChange={(value) => updateDraft("backendMode", value)}
-                />
-                <SelectField<ReasoningMode>
-                  label="Reasoning"
-                  value={draft.reasoning}
-                  options={["off", "auto"]}
-                  onChange={(value) => updateDraft("reasoning", value)}
-                />
-                <TextField label="Host" value={draft.host} onChange={(value) => updateDraft("host", value)} />
-                <NumberField
-                  label="Port"
-                  value={draft.port}
-                  min={1}
-                  max={65535}
-                  onChange={(value) => updateDraft("port", value)}
-                />
-                <ToggleField
-                  label="Jinja templates"
-                  checked={draft.jinja}
-                  onChange={(value) => updateDraft("jinja", value)}
-                />
-              </FormSection>
-
-              <FormSection title="Performance">
-                <NumberField
-                  label="Context size"
-                  value={draft.contextSize}
-                  min={256}
-                  step={256}
-                  onChange={(value) => updateDraft("contextSize", value)}
-                />
-                <NumberField
-                  label="GPU layers"
-                  value={draft.gpuLayers}
-                  min={0}
-                  max={999}
-                  onChange={(value) => updateDraft("gpuLayers", value)}
-                />
-                <SelectField<ThreadsMode>
-                  label="Threads"
-                  value={draft.threadsMode}
-                  options={["auto", "manual"]}
-                  onChange={(value) => updateDraft("threadsMode", value)}
-                />
-                <NumberField
-                  label="Thread count"
-                  value={draft.threads}
-                  min={1}
-                  max={256}
-                  disabled={draft.threadsMode === "auto"}
-                  onChange={(value) => updateDraft("threads", value)}
-                />
-                <NumberField
-                  label="Parallel slots"
-                  value={draft.parallelSlots}
-                  min={1}
-                  max={64}
-                  onChange={(value) => updateDraft("parallelSlots", value)}
-                />
-                <ToggleField
-                  label="Mlock"
-                  hint="Pin model in RAM"
-                  checked={draft.mlock}
-                  onChange={(value) => updateDraft("mlock", value)}
-                />
-                <SelectField<KvCacheType>
-                  label="KV cache K"
-                  value={draft.kvCacheK}
-                  options={["", "f16", "q8_0", "q4_0", "q4_1"]}
-                  labels={{ "": "default" }}
-                  onChange={(value) => updateDraft("kvCacheK", value)}
-                />
-                <SelectField<KvCacheType>
-                  label="KV cache V"
-                  value={draft.kvCacheV}
-                  options={["", "f16", "q8_0", "q4_0", "q4_1"]}
-                  labels={{ "": "default" }}
-                  onChange={(value) => updateDraft("kvCacheV", value)}
-                />
-              </FormSection>
-
-              <section className="form-section">
-                <header>
-                  <h3>Speculative decoding</h3>
-                  <label className="switch-inline">
-                    <input
-                      type="checkbox"
-                      className="switch"
-                      checked={draft.speculative.enabled}
-                      onChange={(event) => updateSpec("enabled", event.target.checked)}
-                    />
-                    <span>{draft.speculative.enabled ? "Enabled" : "Disabled"}</span>
-                  </label>
-                </header>
-                {draft.speculative.enabled ? (
-                  <div className="form-grid">
-                    <SelectField<SpecType>
-                      label="Spec type"
-                      value={draft.speculative.type}
-                      options={["draft-mtp", "none"]}
-                      onChange={(value) => updateSpec("type", value)}
-                    />
-                    <NumberField
-                      label="Spec n-max"
-                      value={draft.speculative.draftNMax}
-                      min={0}
-                      onChange={(value) => updateSpec("draftNMax", value)}
-                    />
-                    <NumberField
-                      label="Draft GPU layers"
-                      value={draft.speculative.draftGpuLayers}
-                      min={0}
-                      onChange={(value) => updateSpec("draftGpuLayers", value)}
-                    />
-                    <TextField
-                      label="Draft model"
-                      value={draft.speculative.draftModelPath}
-                      wide
-                      placeholder="Path to the draft .gguf"
-                      onChange={(value) => updateSpec("draftModelPath", value)}
-                    />
-                  </div>
-                ) : null}
-              </section>
-            </>
-          ) : (
-            <div className="empty">No profile loaded.</div>
-          )}
-        </section>
-
-        <aside className="runtime-panel">
-          <div className="panel-title">
-            <Activity size={18} />
-            <span>Runtime</span>
-          </div>
-          <div className="runtime-actions">
-            <button className="primary" title="Start server" onClick={startSelected} disabled={busy || running || !draft}>
-              <Play size={17} />
-              Start
-            </button>
-            <button title="Stop server" onClick={stopServer} disabled={busy || !running}>
-              <Square size={17} />
-              Stop
-            </button>
-            <button title="Restart server" onClick={restartServer} disabled={busy || !draft}>
-              <RefreshCw size={17} />
-              Restart
-            </button>
-          </div>
-          <dl className="status-list">
-            <div>
-              <dt>State</dt>
-              <dd>
-                <span className={`state-chip ${status.state}`}>{status.state}</span>
-                {status.state === "exited" && status.exitCode !== null ? (
-                  <span className="exit-code">exit {status.exitCode}</span>
-                ) : null}
-              </dd>
-            </div>
-            <div>
-              <dt>PID</dt>
-              <dd>{status.pid ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>Endpoint</dt>
-              <dd>
-                {status.endpoint ?? preview?.endpoint ? (
-                  <a href={status.endpoint ?? preview?.endpoint ?? "#"} target="_blank" rel="noreferrer">
-                    {status.endpoint ?? preview?.endpoint}
-                  </a>
-                ) : (
-                  "-"
-                )}
-                <button className="connect-link" title="Connect an external tool to this server" onClick={() => setConnectOpen(true)}>
-                  <Plug size={13} /> Connect…
-                </button>
-              </dd>
-            </div>
-            <div>
-              <dt>Backend</dt>
-              <dd>{preview?.backend ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>Model</dt>
-              <dd className={preview && !preview.modelExists ? "bad" : ""}>
-                {preview ? (preview.modelExists ? "found" : "missing") : "-"}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="panel-title compact">
-            <Terminal size={18} />
-            <span>Command</span>
-            <CopyButton text={preview?.display} title="Copy command" />
-          </div>
-          <pre className="command-preview">{preview?.display ?? ""}</pre>
-          {preview?.warnings.length ? (
-            <div className="warnings">
-              {preview.warnings.map((warning) => (
-                <span key={warning}>{warning}</span>
-              ))}
-            </div>
-          ) : null}
-
-          <RequirementsPanel
-            profile={draft}
-            onMessage={notify}
-            onApplyGpuLayers={(gpuLayers) => {
-              updateDraft("gpuLayers", gpuLayers);
-              notify(`GPU layers set to ${gpuLayers}. Save the profile to keep it.`, "info");
-            }}
+      {/* Both views stay mounted so filters/compare state survive switching;
+          the inactive one is display:none. Polling gates on document.hidden. */}
+      <div className={`view ${view === "server" ? "" : "view-hidden"}`}>
+        <div className="view-content">
+          <ServerView
+            config={config}
+            profiles={profiles}
+            selectedId={selectedId}
+            draft={draft}
+            preview={preview}
+            status={status}
+            logs={logs}
+            busy={busy}
+            isDirty={isDirty}
+            running={running}
+            onSelectProfile={selectProfile}
+            onNewProfile={() => draft && setDraft(createProfileFrom(draft, "New Profile"))}
+            onDuplicateProfile={() => draft && setDraft(createProfileFrom(draft, `${draft.name} Copy`))}
+            updateDraft={updateDraft}
+            updateSpec={updateSpec}
+            saveDraft={saveDraft}
+            revertDraft={revertDraft}
+            deleteSelected={deleteSelected}
+            startSelected={startSelected}
+            stopServer={stopServer}
+            restartServer={restartServer}
+            onOpenConnect={() => setConnectOpen(true)}
+            notify={notify}
           />
-        </aside>
-      </section>
-
-      <BenchmarkDashboard
-        draft={draft}
-        selectedProfile={selectedProfile}
-        isDirty={isDirty}
-        runtimeRunning={running}
-        busy={busy}
-        saveDraft={saveDraft}
-        onMessage={notify}
-      />
-
-      <section className="logs-band">
-        <div className="panel-title">
-          <Database size={18} />
-          <span>Server Logs</span>
         </div>
-        <LogView logs={logs} height={220} emptyText="No logs yet. Start the server to see output here." />
-      </section>
+      </div>
+
+      <div className={`view ${view === "benchmarks" ? "" : "view-hidden"}`}>
+        <div className="view-content">
+          <BenchmarkDashboard
+            draft={draft}
+            selectedProfile={selectedProfile}
+            isDirty={isDirty}
+            runtimeRunning={running}
+            busy={busy}
+            saveDraft={saveDraft}
+            onMessage={notify}
+          />
+        </div>
+      </div>
     </main>
-  );
-}
-
-interface FormSectionProps {
-  title: string;
-  children: ReactNode;
-}
-
-function FormSection({ title, children }: FormSectionProps) {
-  return (
-    <section className="form-section">
-      <header>
-        <h3>{title}</h3>
-      </header>
-      <div className="form-grid">{children}</div>
-    </section>
   );
 }
