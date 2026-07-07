@@ -7,6 +7,9 @@ on:
   push:
     tags:
       - "v*"
+  # Manual runs build + test the executable on CI without publishing a release
+  # (the release steps below are guarded to tag pushes).
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -35,9 +38,11 @@ jobs:
         run: bun run package
 
       - name: Name the artifact for this tag
+        if: startsWith(github.ref, 'refs/tags/')
         run: cp dist/LlamaTuner.exe "dist/LlamaTuner-${GITHUB_REF_NAME}-win-x64.exe"
 
       - name: Write release notes
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           cat > notes.md <<'EOF'
           A single self-contained Windows x64 executable — no install, no Bun, no dependencies. Double-click it and it starts the server and opens the app in your browser.
@@ -48,6 +53,7 @@ jobs:
           EOF
 
       - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
