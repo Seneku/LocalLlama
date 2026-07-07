@@ -6,6 +6,7 @@ import type {
   BenchmarkStatus,
   CommandPreview,
   DownloadStatus,
+  FavoriteModel,
   LlamaCppRelease,
   LlamaProfile,
   LocalModel,
@@ -109,5 +110,13 @@ export const api = {
   cancelDownload: () => request<DownloadStatus>("/api/models/download/cancel", { method: "POST" }),
   localModels: () => request<LocalModel[]>("/api/models/local"),
   deleteLocalModel: (name: string) =>
-    request<{ ok: boolean }>(`/api/models/local/${encodeURIComponent(name)}`, { method: "DELETE" })
+    request<{ ok: boolean }>(`/api/models/local/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  favorites: () => request<FavoriteModel[]>("/api/models/favorites"),
+  addFavorite: (model: ModelSearchResult) =>
+    request<FavoriteModel[]>("/api/models/favorites", {
+      method: "POST",
+      body: JSON.stringify({ model })
+    }),
+  removeFavorite: (id: string) =>
+    request<FavoriteModel[]>(`/api/models/favorites/${encodeURIComponent(id)}`, { method: "DELETE" })
 };

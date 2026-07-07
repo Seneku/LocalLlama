@@ -1,7 +1,8 @@
 node_modules/
 dist/
-data/profiles.json
-data/benchmarks.json
-data/settings.json
+
+# Machine-local state: profiles, benchmarks, settings, favourites,
+# and downloaded GGUF models (can be many GB).
+data/
 .localllama-server.log
 .llamatuner-server.log

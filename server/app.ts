@@ -5,6 +5,7 @@ import path from "node:path";
 import { BenchmarkManager, buildBenchmarkCommand } from "./benchmark";
 import { createBenchmarkStore, type BenchmarkStore } from "./benchmarkStore";
 import { DownloadManager } from "./downloadManager";
+import { createFavoritesStore, type FavoritesStore } from "./favoritesStore";
 import { estimateProfileMemory, getHardwareInfo } from "./estimate";
 import { getLatestLlamaCppRelease, HttpProxyError, listModelFiles, searchModels } from "./hf";
 import { buildCommand } from "./llama";
@@ -30,6 +31,7 @@ interface AppDeps {
   benchmarkStore?: BenchmarkStore;
   benchmark?: BenchmarkManager;
   downloads?: DownloadManager;
+  favorites?: FavoritesStore;
   /**
    * Self-contained SPA HTML. When provided (standalone/compiled builds), all
    * non-API GET requests serve this instead of reading files from dist/.
@@ -115,7 +117,8 @@ async function routeApi(
   runtime: RuntimeManager,
   benchmarkStore: BenchmarkStore,
   benchmark: BenchmarkManager,
-  downloads: DownloadManager
+  downloads: DownloadManager,
+  favorites: FavoritesStore
 ): Promise<void> {
   const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
 
@@ -161,6 +164,23 @@ async function routeApi(
 
   if (request.method === "POST" && pathname === "/api/models/download/cancel") {
     sendJson(response, 200, await downloads.cancel());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/favorites") {
+    sendJson(response, 200, await favorites.load());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/models/favorites") {
+    const body = await readJson<{ model?: unknown }>(request);
+    sendJson(response, 200, await favorites.add((body.model ?? body) as never));
+    return;
+  }
+
+  const favoriteMatch = pathname.match(/^\/api\/models\/favorites\/(.+)$/u);
+  if (favoriteMatch && request.method === "DELETE") {
+    sendJson(response, 200, await favorites.remove(decodeURIComponent(favoriteMatch[1])));
     return;
   }
 
@@ -381,13 +401,14 @@ export function createRequestHandler(deps: AppDeps = {}) {
   const benchmarkStore = deps.benchmarkStore ?? createBenchmarkStore();
   const benchmark = deps.benchmark ?? new BenchmarkManager(benchmarkStore);
   const downloads = deps.downloads ?? new DownloadManager();
+  const favorites = deps.favorites ?? createFavoritesStore();
   const appHtml = deps.appHtml;
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (url.pathname.startsWith("/api/")) {
-        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark, downloads);
+        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark, downloads, favorites);
         return;
       }
       if (request.method !== "GET" && request.method !== "HEAD") {

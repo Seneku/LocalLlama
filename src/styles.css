@@ -1632,6 +1632,16 @@ dd.bad {
   margin-top: 12px;
 }
 
+.model-view-toggle {
+  margin-bottom: 0;
+}
+
+.model-view-toggle .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .model-search {
   display: flex;
   align-items: center;
@@ -1699,29 +1709,62 @@ dd.bad {
   background: var(--bg-deep);
 }
 
+.model-row-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.model-row-wrap:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+
+.model-row-wrap.active {
+  border-color: var(--accent);
+  background: #20313a;
+}
+
 .model-row {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
   gap: 3px;
-  width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   padding: 8px 10px;
   text-align: left;
-  border-color: transparent;
+  border: none;
   background: transparent;
 }
 
 .model-row:hover:not(:disabled) {
-  background: var(--bg-raised);
-  border-color: var(--border-strong);
+  background: transparent;
 }
 
-.model-row.active {
-  border-color: var(--accent);
-  background: #20313a;
+.star-btn {
+  flex: none;
+  width: 36px;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+}
+
+.star-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--amber);
+}
+
+.star-btn.on {
+  color: var(--amber);
 }
 
 .model-name {

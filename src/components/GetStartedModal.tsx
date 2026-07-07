@@ -7,6 +7,7 @@ import {
   Loader,
   Package,
   Search,
+  Star,
   Trash2,
   X,
   XCircle
@@ -17,6 +18,7 @@ import { api } from "../api";
 import type {
   DownloadStatus,
   EstimateFit,
+  FavoriteModel,
   HardwareInfo,
   LlamaCppRelease,
   LocalModel,
@@ -243,6 +245,8 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   const [filesLoading, setFilesLoading] = useState(false);
   const [download, setDownload] = useState<DownloadStatus | null>(null);
   const [local, setLocal] = useState<LocalModel[]>([]);
+  const [favorites, setFavorites] = useState<FavoriteModel[]>([]);
+  const [view, setView] = useState<"search" | "favorites">("search");
 
   const runSearch = useCallback(
     async (term: string) => {
@@ -262,11 +266,22 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
     api.localModels().then(setLocal).catch(() => undefined);
   }, []);
 
-  // Initial popular list + local models.
+  // Initial popular list + local models + saved favourites.
   useEffect(() => {
     void runSearch("");
     refreshLocal();
+    api.favorites().then(setFavorites).catch(() => undefined);
   }, [runSearch, refreshLocal]);
+
+  const isFavorite = (id: string) => favorites.some((favorite) => favorite.id === id);
+
+  async function toggleFavorite(model: ModelSearchResult) {
+    try {
+      setFavorites(isFavorite(model.id) ? await api.removeFavorite(model.id) : await api.addFavorite(model));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
 
   // Poll download progress while a download is active.
   const downloading = download?.state === "downloading";
@@ -369,27 +384,47 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         </div>
       ) : null}
 
+      <div className="log-toolbar model-view-toggle">
+        <button className={`chip ${view === "search" ? "active" : ""}`} onClick={() => setView("search")}>
+          Search results
+        </button>
+        <button className={`chip ${view === "favorites" ? "active" : ""}`} onClick={() => setView("favorites")}>
+          <Star size={13} fill={view === "favorites" ? "currentColor" : "none"} />
+          Favourites <small>{favorites.length}</small>
+        </button>
+      </div>
+
       <div className="model-columns">
         <div className="model-list">
-          {results.length === 0 ? (
-            <div className="empty">{searching ? "Searching…" : "No models found."}</div>
+          {(view === "favorites" ? favorites : results).length === 0 ? (
+            <div className="empty">
+              {view === "favorites"
+                ? "No favourites yet — tap the star on a model to save it here."
+                : searching
+                  ? "Searching…"
+                  : "No models found."}
+            </div>
           ) : (
-            results.map((model) => (
-              <button
-                key={model.id}
-                className={`model-row ${selected?.id === model.id ? "active" : ""}`}
-                title={model.id}
-                onClick={() => selectModel(model)}
-              >
-                <span className="model-name">
-                  <span className="id-text">{model.id}</span>
-                  {model.gated ? <em className="gated-tag">gated</em> : null}
-                </span>
-                <small>
-                  ↓ {model.downloads.toLocaleString()} · ♥ {model.likes.toLocaleString()}
-                  {model.pipelineTag ? ` · ${model.pipelineTag}` : ""}
-                </small>
-              </button>
+            (view === "favorites" ? favorites : results).map((model) => (
+              <div key={model.id} className={`model-row-wrap ${selected?.id === model.id ? "active" : ""}`}>
+                <button className="model-row" title={model.id} onClick={() => selectModel(model)}>
+                  <span className="model-name">
+                    <span className="id-text">{model.id}</span>
+                    {model.gated ? <em className="gated-tag">gated</em> : null}
+                  </span>
+                  <small>
+                    ↓ {model.downloads.toLocaleString()} · ♥ {model.likes.toLocaleString()}
+                    {model.pipelineTag ? ` · ${model.pipelineTag}` : ""}
+                  </small>
+                </button>
+                <button
+                  className={`star-btn ${isFavorite(model.id) ? "on" : ""}`}
+                  title={isFavorite(model.id) ? "Remove from favourites" : "Add to favourites"}
+                  onClick={() => toggleFavorite(model)}
+                >
+                  <Star size={16} fill={isFavorite(model.id) ? "currentColor" : "none"} />
+                </button>
+              </div>
             ))
           )}
         </div>

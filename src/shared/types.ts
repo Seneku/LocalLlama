@@ -109,6 +109,10 @@ export interface ModelSearchResult {
   updatedAt: string | null;
 }
 
+export interface FavoriteModel extends ModelSearchResult {
+  addedAt: string;
+}
+
 export interface ModelFile {
   filename: string;
   sizeBytes: number;
