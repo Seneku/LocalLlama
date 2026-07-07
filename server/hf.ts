@@ -72,17 +72,20 @@ export function parseQuant(filename: string): string | null {
 }
 
 // Coarse pre-download fit: we only know the file size, not the GGUF tensor
-// geometry, so weights (x1.12 for overhead) plus a fixed KV/compute allowance
-// are compared against free VRAM. Exact numbers come from the calibrated
-// estimator once the model is on disk and used in a profile.
+// geometry, so weights (x1.08 for runtime/compute) plus a moderate KV allowance
+// are compared against the card's TOTAL VRAM (minus a reserve for the OS /
+// desktop compositor) — not whatever is free at this instant, which would be
+// misleadingly pessimistic while other apps hold VRAM. The exact per-run number
+// comes from the calibrated estimator once the model is on disk.
 export function coarseFit(sizeMiB: number, hardware: HardwareInfo): EstimateFit {
   const gpu = hardware.gpus[0] ?? null;
-  const capacity = gpu?.freeMiB ?? gpu?.totalMiB ?? null;
-  if (!capacity || capacity <= 0) {
+  const total = gpu?.totalMiB ?? gpu?.freeMiB ?? null;
+  if (!total || total <= 0) {
     return "unknown";
   }
-  const need = sizeMiB * 1.12 + 1024;
-  const ratio = need / capacity;
+  const usable = Math.max(0, total - 1024); // ~1 GiB reserved for the OS/compositor
+  const need = sizeMiB * 1.08 + 768;
+  const ratio = need / usable;
   if (ratio <= 0.9) {
     return "fits";
   }

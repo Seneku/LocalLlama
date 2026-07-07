@@ -362,8 +362,9 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         <div className="hw-line">
           <HardDrive size={14} />
           <span>
-            {gpu.name} — {formatGb((gpu.freeMiB ?? 0) * 1024 * 1024)} free of {formatGb((gpu.totalMiB ?? 0) * 1024 * 1024)}.
-            Fit badges are rough; the exact estimate appears once a model is downloaded and selected in a profile.
+            {gpu.name} — {formatGb((gpu.totalMiB ?? 0) * 1024 * 1024)} VRAM (
+            {formatGb((gpu.freeMiB ?? 0) * 1024 * 1024)} free now). Fit badges compare model size against your card's
+            total VRAM; the exact per-run estimate appears once a model is downloaded and used in a profile.
           </span>
         </div>
       ) : null}
@@ -377,10 +378,11 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
               <button
                 key={model.id}
                 className={`model-row ${selected?.id === model.id ? "active" : ""}`}
+                title={model.id}
                 onClick={() => selectModel(model)}
               >
                 <span className="model-name">
-                  {model.id}
+                  <span className="id-text">{model.id}</span>
                   {model.gated ? <em className="gated-tag">gated</em> : null}
                 </span>
                 <small>
@@ -407,11 +409,11 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
                   ? Math.min(100, Math.round((download.receivedBytes / download.totalBytes) * 100))
                   : 0;
               return (
-                <div key={file.filename} className={`file-row ${file.fit}`}>
+                <div key={file.filename} className={`file-row ${file.fit}`} title={file.filename}>
                   <div className="file-head">
                     <span className="file-name">
                       {file.quant ? <em className="quant-tag">{file.quant}</em> : null}
-                      {file.filename}
+                      <span className="fname-text">{file.filename}</span>
                     </span>
                     <span className={`fit-pill ${file.fit}`}>{fitLabel(file.fit)}</span>
                   </div>

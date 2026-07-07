@@ -43,20 +43,17 @@ describe("parseQuant", () => {
 });
 
 describe("coarseFit", () => {
-  test("classifies against free VRAM", () => {
-    // need ~= sizeMiB * 1.12 + 1024
-    expect(coarseFit(5000, hardware(11000))).toBe("fits"); // 6624/11000 = 0.60
-    expect(coarseFit(8460, hardware(11000))).toBe("tight"); // 10499/11000 = 0.95
-    expect(coarseFit(9000, hardware(11000))).toBe("over"); // 11104/11000 = 1.01
-    expect(coarseFit(20000, hardware(11000))).toBe("over");
+  test("measures against total VRAM, not what is free right now", () => {
+    // need ~= sizeMiB * 1.08 + 768; usable = total - 1024.
+    // Free VRAM is only 6000 MiB but a 12 GB card still fits a 5 GB model.
+    expect(coarseFit(5000, hardware(6000, 12000))).toBe("fits"); // 6168 / 10976 = 0.56
+    expect(coarseFit(8064, hardware(6000, 11000))).toBe("tight"); // 9477 / 9976 = 0.95
+    expect(coarseFit(12000, hardware(6000, 11000))).toBe("over"); // 13728 / 9976 = 1.38
     expect(coarseFit(5000, hardware(null))).toBe("unknown");
   });
 
-  test("tight band sits just under capacity", () => {
-    // need == capacity boundary: pick sizeMiB so need ~= 0.95 * capacity
-    const capacity = 11000;
-    const sizeMiB = (0.95 * capacity - 1024) / 1.12; // ~8397
-    expect(coarseFit(sizeMiB, hardware(capacity))).toBe("tight");
+  test("a 9B Q4 (~5.2 GB) fits a 12 GB card", () => {
+    expect(coarseFit(5366, hardware(6890, 12281))).toBe("fits");
   });
 });
 
