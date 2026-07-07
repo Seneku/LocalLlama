@@ -1686,10 +1686,13 @@ dd.bad {
 .model-list,
 .model-files {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 6px;
+  min-width: 0;
   max-height: 320px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px;
@@ -1801,7 +1804,9 @@ dd.bad {
 
 .file-row {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-radius: var(--radius-sm);
@@ -1819,6 +1824,11 @@ dd.bad {
 
 .file-row.over {
   border-left-color: var(--red-border);
+}
+
+.file-head,
+.file-meta {
+  min-width: 0;
 }
 
 .file-head {
