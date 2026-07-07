@@ -2,7 +2,7 @@
 
 A local web UI for tuning, launching, and benchmarking [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` configurations. Build named profiles, see the exact command before you run it, get a GGUF-accurate VRAM estimate for your GPU, run `llama-bench` sweeps, and compare the results — without hand-editing `.cmd` files.
 
-> **Platform:** Windows, Linux, and macOS. LocalLlama runs against a local llama.cpp build you already have. GPU/VRAM detection uses `nvidia-smi` (Windows & Linux with an NVIDIA GPU); on macOS the estimator falls back to system-RAM figures for now.
+> **Platform:** Windows, Linux, and macOS. LocalLlama runs against a local llama.cpp build you already have. GPU/VRAM detection uses `nvidia-smi` on Windows & Linux (NVIDIA), and models Apple Silicon's Metal GPU as unified memory on macOS (an approximate working-set budget; Intel Macs fall back to CPU).
 
 ## Download
 

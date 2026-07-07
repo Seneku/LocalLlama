@@ -63,7 +63,7 @@ jobs:
           - **macOS** — Gatekeeper blocks unsigned apps. Run `xattr -d com.apple.quarantine ./LocalLlama-*-macos-*` (or right-click → **Open**), then `chmod +x` it.
           - **Linux** — `chmod +x ./LocalLlama-*-linux-x64`, then run it.
 
-          > GPU/VRAM detection currently uses `nvidia-smi` (Windows & Linux NVIDIA). On macOS the estimator falls back to system-RAM figures — Apple-Silicon Metal/unified-memory support is planned. Build from source with `bun run package:all`.
+          > GPU/VRAM detection uses `nvidia-smi` on Windows & Linux (NVIDIA), and models Apple Silicon's Metal GPU as unified memory on macOS (approximate). Intel Macs fall back to CPU. Build from source with `bun run package:all`.
           EOF
 
       - name: Publish release
