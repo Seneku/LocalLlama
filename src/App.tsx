@@ -360,7 +360,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <h1>LlamaTuner</h1>
+          <h1>LocalLlama</h1>
           <div className="subline">
             <span className="path">{config?.llamaRoot ?? "Loading llama.cpp path"}</span>
             <span className={config?.detected.cudaServer ? "pill ok" : "pill muted"}>CUDA</span>
@@ -389,7 +389,7 @@ export default function App() {
             href="https://www.buymeacoffee.com/seneku"
             target="_blank"
             rel="noreferrer noopener"
-            title="Support LlamaTuner — buy me a coffee"
+            title="Support LocalLlama — buy me a coffee"
           >
             <Coffee size={15} />
             <span>Buy me a coffee</span>
@@ -422,7 +422,7 @@ export default function App() {
           <div>
             <strong>llama.cpp not found</strong>
             <span>
-              No <code>llama-server</code> was detected under <code>{config.llamaRoot}</code>. LlamaTuner runs your
+              No <code>llama-server</code> was detected under <code>{config.llamaRoot}</code>. LocalLlama runs your
               local llama.cpp build — get set up in a couple of minutes.
             </span>
           </div>

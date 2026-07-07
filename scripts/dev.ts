@@ -5,7 +5,7 @@ const commands = [
     name: "api",
     command: "bun",
     args: ["--watch", "server/index.ts"],
-    env: { LLAMATUNER_PORT: "3174" }
+    env: { LOCALLLAMA_PORT: "3174" }
   },
   {
     name: "ui",

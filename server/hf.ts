@@ -17,7 +17,7 @@ const GITHUB_LATEST = "https://api.github.com/repos/ggml-org/llama.cpp/releases/
 const HF_API = "https://huggingface.co/api";
 const HF_HOST = "https://huggingface.co";
 const RELEASE_TTL_MS = 60 * 60 * 1000;
-const USER_AGENT = "LlamaTuner";
+const USER_AGENT = "LocalLlama";
 
 export class HttpProxyError extends Error {
   constructor(public readonly status: number, message: string) {

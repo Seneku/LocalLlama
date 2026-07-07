@@ -153,8 +153,8 @@ function LlamaCppGuide({ config, notify }: { config: RuntimeConfig | null; notif
       ) : null}
 
       <p className="modal-hint">
-        LlamaTuner runs your local <strong>llama.cpp</strong> build — it doesn't bundle one. Grab a prebuilt Windows
-        release below, unzip it, and point LlamaTuner at the folder in <strong>Settings</strong>.
+        LocalLlama runs your local <strong>llama.cpp</strong> build — it doesn't bundle one. Grab a prebuilt Windows
+        release below, unzip it, and point LocalLlama at the folder in <strong>Settings</strong>.
         {release ? <> Current release: <strong>{release.tag}</strong>.</> : null}
       </p>
 
@@ -179,7 +179,7 @@ function LlamaCppGuide({ config, notify }: { config: RuntimeConfig | null; notif
           <code>cudart-*</code> package into the <em>same folder</em> so the DLLs sit next to the exe.
         </li>
         <li>
-          <strong>Point LlamaTuner at it</strong>: open Settings and set the llama.cpp root to that folder. The pills
+          <strong>Point LocalLlama at it</strong>: open Settings and set the llama.cpp root to that folder. The pills
           turn green when the binaries are found.
         </li>
       </ol>

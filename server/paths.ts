@@ -18,26 +18,26 @@ const DEFAULT_LLAMA_ROOT = "E:\\Projects\\llama.cpp";
 // Precedence: saved settings > environment variable > default derived from llamaRoot.
 export function getRuntimePaths(): RuntimePaths {
   const settings = getSettings();
-  const llamaRoot = settings.llamaRoot || process.env.LLAMATUNER_LLAMA_ROOT || DEFAULT_LLAMA_ROOT;
-  const dataPath = process.env.LLAMATUNER_DATA_DIR ?? path.resolve(process.cwd(), "data");
+  const llamaRoot = settings.llamaRoot || process.env.LOCALLLAMA_LLAMA_ROOT || DEFAULT_LLAMA_ROOT;
+  const dataPath = process.env.LOCALLLAMA_DATA_DIR ?? path.resolve(process.cwd(), "data");
 
   return {
     llamaRoot,
     cudaServerPath:
       settings.cudaServerPath ||
-      process.env.LLAMATUNER_CUDA_SERVER ||
+      process.env.LOCALLLAMA_CUDA_SERVER ||
       path.join(llamaRoot, "dist-cuda", "llama-server.exe"),
     cpuServerPath:
       settings.cpuServerPath ||
-      process.env.LLAMATUNER_CPU_SERVER ||
+      process.env.LOCALLLAMA_CPU_SERVER ||
       path.join(llamaRoot, "build", "bin", "llama-server.exe"),
     cudaBenchPath:
       settings.cudaBenchPath ||
-      process.env.LLAMATUNER_CUDA_BENCH ||
+      process.env.LOCALLLAMA_CUDA_BENCH ||
       path.join(llamaRoot, "dist-cuda", "llama-bench.exe"),
     cpuBenchPath:
       settings.cpuBenchPath ||
-      process.env.LLAMATUNER_CPU_BENCH ||
+      process.env.LOCALLLAMA_CPU_BENCH ||
       path.join(llamaRoot, "build", "bin", "llama-bench.exe"),
     dataPath
   };
@@ -49,8 +49,8 @@ export function getModelsDir(): string {
   if (settings.modelsDir) {
     return settings.modelsDir;
   }
-  if (process.env.LLAMATUNER_MODELS_DIR) {
-    return process.env.LLAMATUNER_MODELS_DIR;
+  if (process.env.LOCALLLAMA_MODELS_DIR) {
+    return process.env.LOCALLLAMA_MODELS_DIR;
   }
   return path.join(getRuntimePaths().dataPath, "models");
 }

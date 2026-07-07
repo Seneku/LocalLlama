@@ -4,8 +4,8 @@ import { createBenchmarkStore } from "./benchmarkStore";
 import { DownloadManager } from "./downloadManager";
 import { RuntimeManager } from "./runtime";
 
-const port = Number(process.env.LLAMATUNER_PORT ?? 4187);
-const host = process.env.LLAMATUNER_HOST ?? "127.0.0.1";
+const port = Number(process.env.LOCALLLAMA_PORT ?? 4187);
+const host = process.env.LOCALLLAMA_HOST ?? "127.0.0.1";
 
 const runtime = new RuntimeManager();
 const benchmarkStore = createBenchmarkStore();
@@ -39,7 +39,7 @@ process.on("SIGTERM", () => {
 function listen(candidatePort: number, retries = 0): void {
   const server = createApp({ runtime, benchmarkStore, benchmark, downloads });
   server.once("error", (error: NodeJS.ErrnoException) => {
-    if (error.code === "EADDRINUSE" && !process.env.LLAMATUNER_PORT && retries < 10) {
+    if (error.code === "EADDRINUSE" && !process.env.LOCALLLAMA_PORT && retries < 10) {
       listen(candidatePort + 1, retries + 1);
       return;
     }
@@ -47,7 +47,7 @@ function listen(candidatePort: number, retries = 0): void {
     process.exit(1);
   });
   server.listen(candidatePort, host, () => {
-    console.log(`LlamaTuner listening at http://${host}:${candidatePort}`);
+    console.log(`LocalLlama listening at http://${host}:${candidatePort}`);
   });
 }
 

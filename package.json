@@ -1,5 +1,5 @@
 {
-  "name": "llama-tuner",
+  "name": "local-llama",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "build:standalone": "bun run build && bun run scripts/inline-frontend.ts",
     "start": "bun server/index.ts",
     "start:standalone": "bun run build:standalone && bun run server/standalone.ts",
-    "package": "bun run build:standalone && bun build --compile --minify --outfile dist/LlamaTuner.exe server/standalone.ts",
-    "restart": "scripts/restart-llamatuner.cmd",
+    "package": "bun run build:standalone && bun build --compile --minify --outfile dist/LocalLlama.exe server/standalone.ts",
+    "restart": "scripts/restart-localllama.cmd",
     "test": "bun test"
   },
   "dependencies": {

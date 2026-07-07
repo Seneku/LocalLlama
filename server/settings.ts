@@ -16,7 +16,7 @@ export const EMPTY_SETTINGS: AppSettings = {
 // The settings file lives in the data directory, which is intentionally NOT
 // settings-overridable (the settings file must be findable before settings load).
 function settingsFile(): string {
-  const dataPath = process.env.LLAMATUNER_DATA_DIR ?? path.resolve(process.cwd(), "data");
+  const dataPath = process.env.LOCALLLAMA_DATA_DIR ?? path.resolve(process.cwd(), "data");
   return path.join(dataPath, "settings.json");
 }
 

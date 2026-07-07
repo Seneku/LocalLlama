@@ -15,7 +15,7 @@ const paths: RuntimePaths = {
   cpuServerPath: "C:\\llama.cpp\\build\\bin\\llama-server.exe",
   cudaBenchPath: "C:\\llama.cpp\\dist-cuda\\llama-bench.exe",
   cpuBenchPath: "C:\\llama.cpp\\build\\bin\\llama-bench.exe",
-  dataPath: "C:\\LlamaTuner\\data"
+  dataPath: "C:\\LocalLlama\\data"
 };
 
 const exists = (filePath: string) =>

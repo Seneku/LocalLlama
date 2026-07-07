@@ -13,14 +13,14 @@ let server: Server | null = null;
 let baseUrl = "";
 const payload = Buffer.alloc(256 * 1024, 7); // 256 KiB of bytes
 
-const originalDataDir = process.env.LLAMATUNER_DATA_DIR;
-const originalModelsDir = process.env.LLAMATUNER_MODELS_DIR;
+const originalDataDir = process.env.LOCALLLAMA_DATA_DIR;
+const originalModelsDir = process.env.LOCALLLAMA_MODELS_DIR;
 
 beforeEach(async () => {
-  tempDir = mkdtempSync(path.join(tmpdir(), "llamatuner-dl-"));
+  tempDir = mkdtempSync(path.join(tmpdir(), "localllama-dl-"));
   modelsDir = path.join(tempDir, "models");
-  process.env.LLAMATUNER_DATA_DIR = tempDir;
-  process.env.LLAMATUNER_MODELS_DIR = modelsDir;
+  process.env.LOCALLLAMA_DATA_DIR = tempDir;
+  process.env.LOCALLLAMA_MODELS_DIR = modelsDir;
   resetSettingsCache();
 
   server = createServer((request, response) => {
@@ -57,14 +57,14 @@ afterEach(async () => {
     server = null;
   }
   if (originalDataDir === undefined) {
-    delete process.env.LLAMATUNER_DATA_DIR;
+    delete process.env.LOCALLLAMA_DATA_DIR;
   } else {
-    process.env.LLAMATUNER_DATA_DIR = originalDataDir;
+    process.env.LOCALLLAMA_DATA_DIR = originalDataDir;
   }
   if (originalModelsDir === undefined) {
-    delete process.env.LLAMATUNER_MODELS_DIR;
+    delete process.env.LOCALLLAMA_MODELS_DIR;
   } else {
-    process.env.LLAMATUNER_MODELS_DIR = originalModelsDir;
+    process.env.LOCALLLAMA_MODELS_DIR = originalModelsDir;
   }
   resetSettingsCache();
   rmSync(tempDir, { recursive: true, force: true });

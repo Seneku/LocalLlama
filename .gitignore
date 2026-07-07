@@ -3,4 +3,5 @@ dist/
 data/profiles.json
 data/benchmarks.json
 data/settings.json
+.localllama-server.log
 .llamatuner-server.log

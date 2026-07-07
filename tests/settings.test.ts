@@ -6,19 +6,19 @@ import path from "node:path";
 import { getRuntimePaths } from "../server/paths";
 import { getSettings, resetSettingsCache, saveSettings } from "../server/settings";
 
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "llamatuner-settings-"));
-const originalDataDir = process.env.LLAMATUNER_DATA_DIR;
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "localllama-settings-"));
+const originalDataDir = process.env.LOCALLLAMA_DATA_DIR;
 
 beforeAll(() => {
-  process.env.LLAMATUNER_DATA_DIR = tempDir;
+  process.env.LOCALLLAMA_DATA_DIR = tempDir;
   resetSettingsCache();
 });
 
 afterAll(() => {
   if (originalDataDir === undefined) {
-    delete process.env.LLAMATUNER_DATA_DIR;
+    delete process.env.LOCALLLAMA_DATA_DIR;
   } else {
-    process.env.LLAMATUNER_DATA_DIR = originalDataDir;
+    process.env.LOCALLLAMA_DATA_DIR = originalDataDir;
   }
   resetSettingsCache();
   fs.rmSync(tempDir, { recursive: true, force: true });

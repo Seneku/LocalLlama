@@ -105,7 +105,7 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
         ) : (
           <>
             <p className="modal-hint">
-              Point LlamaTuner at your llama.cpp installation. Binary paths are derived from the root — override
+              Point LocalLlama at your llama.cpp installation. Binary paths are derived from the root — override
               them only if your build lives elsewhere. Empty fields use the defaults shown as placeholders.
             </p>
 

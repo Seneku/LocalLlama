@@ -1,5 +1,5 @@
 // Standalone entry: serves the embedded single-file UI + API from one process
-// and opens the browser on launch. Built into LlamaTuner.exe via `bun run package`.
+// and opens the browser on launch. Built into LocalLlama.exe via `bun run package`.
 import { spawn } from "node:child_process";
 
 import { createApp } from "./app";
@@ -11,8 +11,8 @@ import { RuntimeManager } from "./runtime";
 // scripts/inline-frontend.ts (run `bun run build:standalone` first).
 import appHtml from "../dist/standalone.html.txt" with { type: "text" };
 
-const port = Number(process.env.LLAMATUNER_PORT ?? 4187);
-const host = process.env.LLAMATUNER_HOST ?? "127.0.0.1";
+const port = Number(process.env.LOCALLLAMA_PORT ?? 4187);
+const host = process.env.LOCALLLAMA_HOST ?? "127.0.0.1";
 
 const runtime = new RuntimeManager();
 const benchmarkStore = createBenchmarkStore();
@@ -38,7 +38,7 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 function openBrowser(url: string): void {
-  if (process.env.LLAMATUNER_NO_OPEN) {
+  if (process.env.LOCALLLAMA_NO_OPEN) {
     return;
   }
   try {
@@ -58,7 +58,7 @@ function openBrowser(url: string): void {
 function listen(candidatePort: number, retries = 0): void {
   const server = createApp({ runtime, benchmarkStore, benchmark, downloads, appHtml });
   server.once("error", (error: NodeJS.ErrnoException) => {
-    if (error.code === "EADDRINUSE" && !process.env.LLAMATUNER_PORT && retries < 10) {
+    if (error.code === "EADDRINUSE" && !process.env.LOCALLLAMA_PORT && retries < 10) {
       listen(candidatePort + 1, retries + 1);
       return;
     }
@@ -67,7 +67,7 @@ function listen(candidatePort: number, retries = 0): void {
   });
   server.listen(candidatePort, host, () => {
     const url = `http://${host}:${candidatePort}`;
-    console.log(`LlamaTuner is running at ${url}`);
+    console.log(`LocalLlama is running at ${url}`);
     console.log("Close this window (or press Ctrl+C) to stop the server.");
     openBrowser(url);
   });

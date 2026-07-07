@@ -355,7 +355,7 @@ function serveStatic(response: ServerResponse, pathname: string): void {
 
   if (!fs.existsSync(filePath)) {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    response.end("LlamaTuner build not found. Run bun run build first, or use bun run dev.");
+    response.end("LocalLlama build not found. Run bun run build first, or use bun run dev.");
     return;
   }
 

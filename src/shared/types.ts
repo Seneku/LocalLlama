@@ -44,7 +44,7 @@ export interface LlamaProfile {
 
 /**
  * User-editable path overrides. Empty string = use the default derived from
- * llamaRoot (or the LLAMATUNER_* environment variables).
+ * llamaRoot (or the LOCALLLAMA_* environment variables).
  */
 export interface AppSettings {
   llamaRoot: string;
