@@ -13,6 +13,8 @@ export interface GgufLayerInfo {
   index: number;
   /** Total weight bytes of all tensors in this block. */
   bytes: number;
+  /** Bytes of the MoE routed-expert tensors (blk.N.ffn_*_exps) — offloadable to CPU via --cpu-moe. */
+  expertBytes: number;
   /** Output rows of blk.N.attn_k.weight — elements stored per token in the K cache. */
   attnKElements: number | null;
   attnVElements: number | null;
@@ -340,10 +342,14 @@ function parseTensorLayout(reader: BufferReader, tensorCount: number): GgufTenso
       const tensorName = blockMatch[2];
       let layer = layers.get(blockIndex);
       if (!layer) {
-        layer = { index: blockIndex, bytes: 0, attnKElements: null, attnVElements: null, recurrent: false };
+        layer = { index: blockIndex, bytes: 0, expertBytes: 0, attnKElements: null, attnVElements: null, recurrent: false };
         layers.set(blockIndex, layer);
       }
       layer.bytes += bytes;
+      // Routed MoE experts (e.g. ffn_gate_exps / ffn_up_exps / ffn_down_exps).
+      if (tensorName.includes("_exps")) {
+        layer.expertBytes += bytes;
+      }
       if (tensorName === "attn_k.weight") {
         // ne[1] = output rows = elements stored per token in the K cache.
         layer.attnKElements = dims[1] ?? null;

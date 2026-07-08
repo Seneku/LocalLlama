@@ -116,12 +116,15 @@ function usesGpu(backend: ResolvedBackend): boolean {
 }
 
 interface LayerModel {
+  index: number;
   /** Attention layers: bytes stored per cached token (already scaled by KV quant type). */
   kvBytesPerCell: number;
   /** Recurrent layers: constant state bytes per parallel sequence. */
   stateBytesPerSeq: number;
   kind: "full" | "swa" | "recurrent";
   weightBytes: number;
+  /** Routed-expert bytes within weightBytes — moved to CPU by --cpu-moe/--n-cpu-moe. */
+  expertBytes: number;
   offloaded: boolean;
 }
 
@@ -211,6 +214,7 @@ function buildModelPlan(
   interface BlockInfo {
     index: number;
     bytes: number;
+    expertBytes: number;
     kElements: number | null;
     vElements: number | null;
     recurrent: boolean;
@@ -230,6 +234,7 @@ function buildModelPlan(
       .map((layer) => ({
         index: layer.index,
         bytes: layer.bytes,
+        expertBytes: layer.expertBytes,
         kElements: layer.attnKElements,
         vElements: layer.attnVElements ?? layer.attnKElements,
         recurrent: layer.recurrent
@@ -255,6 +260,7 @@ function buildModelPlan(
     blocks = Array.from({ length: blockCount }, (_, index) => ({
       index,
       bytes: layerBytes,
+      expertBytes: 0, // unknown without the tensor table; --cpu-moe won't adjust the estimate
       kElements,
       vElements,
       recurrent: interval ? (index + 1) % interval !== 0 : false
@@ -298,28 +304,44 @@ function buildModelPlan(
   const stateBytes = recurrentStateBytes(metadata);
   const layers: LayerModel[] = blocks.map((block) => {
     const offloaded = gpuLayers > 0 && block.index >= offloadThreshold;
+    const common = { index: block.index, expertBytes: block.expertBytes, weightBytes: block.bytes, offloaded };
     if (block.index >= cacheBlockLimit) {
       // MTP/nextn block: weights load, but no KV cache or recurrent state.
-      return { kind: "recurrent" as const, kvBytesPerCell: 0, stateBytesPerSeq: 0, weightBytes: block.bytes, offloaded };
+      return { ...common, kind: "recurrent" as const, kvBytesPerCell: 0, stateBytesPerSeq: 0 };
     }
     if (block.recurrent || !block.kElements) {
-      return { kind: "recurrent" as const, kvBytesPerCell: 0, stateBytesPerSeq: stateBytes, weightBytes: block.bytes, offloaded };
+      return { ...common, kind: "recurrent" as const, kvBytesPerCell: 0, stateBytesPerSeq: stateBytes };
     }
     const kind = swaLayers.has(block.index) ? ("swa" as const) : ("full" as const);
     const kvBytesPerCell = block.kElements * keyBytes + (block.vElements ?? block.kElements) * valueBytes;
-    return { kind, kvBytesPerCell, stateBytesPerSeq: 0, weightBytes: block.bytes, offloaded };
+    return { ...common, kind, kvBytesPerCell, stateBytesPerSeq: 0 };
   });
+
+  // --cpu-moe / --n-cpu-moe move routed-expert weights of the affected layers to
+  // the CPU even when the layer is otherwise offloaded (attention stays on GPU).
+  const expertsOnCpu = (index: number) =>
+    usesGpu(backend) && (profile.cpuMoe || (profile.nCpuMoe > 0 && index < profile.nCpuMoe));
 
   // Tied-embedding models have no separate output.weight; llama.cpp
   // materialises the output head from token_embd on the GPU when offloaded.
   const outputHeadBytes = outputBytes > 0 ? outputBytes : tokenEmbdBytes;
-  let gpuWeights = layers.filter((layer) => layer.offloaded).reduce((sum, layer) => sum + layer.weightBytes, 0);
+  let gpuWeights = 0;
+  let expertOffloadBytes = 0; // expert weight pulled off the GPU onto the CPU
+  for (const layer of layers) {
+    if (!layer.offloaded) {
+      continue;
+    }
+    const cpuExperts = expertsOnCpu(layer.index) ? layer.expertBytes : 0;
+    gpuWeights += layer.weightBytes - cpuExperts;
+    expertOffloadBytes += cpuExperts;
+  }
   if (gpuLayers > 0) {
     gpuWeights += (outputOffloaded ? outputHeadBytes : 0) + otherBytes;
   }
   // Token embeddings always stay host-side (mmapped), even at full offload.
   const cpuWeights =
     layers.filter((layer) => !layer.offloaded).reduce((sum, layer) => sum + layer.weightBytes, 0) +
+    expertOffloadBytes +
     (fromTensorLayout ? tokenEmbdBytes + trailingBytes : Math.max(0, fileBytes * 0.1)) +
     (gpuLayers > 0 ? 0 : outputBytes + otherBytes);
 
@@ -606,6 +628,13 @@ export async function estimateProfileMemory(
   }
   if (profile.fit) {
     assumptions.push("--fit on lets llama.cpp auto-size offload to fit VRAM; this estimate uses the profile's GPU-layers value.");
+  }
+  if (gpuActive && (profile.cpuMoe || profile.nCpuMoe > 0)) {
+    assumptions.push(
+      profile.cpuMoe
+        ? "MoE expert weights are kept on the CPU (--cpu-moe) and excluded from VRAM; they add to system RAM instead."
+        : `MoE expert weights for the first ${profile.nCpuMoe} layers are kept on the CPU (--n-cpu-moe) and excluded from VRAM.`
+    );
   }
   if (profile.speculative.enabled && !profile.speculative.draftModelPath.trim()) {
     assumptions.push("Bundled MTP heads are treated as part of the main GGUF file.");

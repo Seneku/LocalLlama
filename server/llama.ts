@@ -102,6 +102,16 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
       args.push("--fit-target", String(Math.floor(profile.fitTargetMiB)));
     }
   }
+  // MoE expert offload: keep the (large, sparsely-used) expert weights on the
+  // CPU while attention stays on the GPU. --cpu-moe covers all layers;
+  // --n-cpu-moe N only the first N. Meaningless without a GPU.
+  if (backend !== "CPU") {
+    if (profile.cpuMoe) {
+      args.push("--cpu-moe");
+    } else if (profile.nCpuMoe > 0) {
+      args.push("--n-cpu-moe", String(Math.floor(profile.nCpuMoe)));
+    }
+  }
   if (profile.parallelSlots > 0) {
     args.push("-np", String(positiveInteger(profile.parallelSlots, 1)));
   }

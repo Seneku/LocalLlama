@@ -79,6 +79,8 @@ export function normalizeProfile(input: unknown): LlamaProfile {
     mmap: bool(raw.mmap, true),
     fit: bool(raw.fit, false),
     fitTargetMiB: num(raw.fitTargetMiB, 0),
+    cpuMoe: bool(raw.cpuMoe, false),
+    nCpuMoe: num(raw.nCpuMoe, 0),
     temperature: num(raw.temperature, 0.8),
     parallelSlots: num(raw.parallelSlots, 1),
     kvCacheK: oneOf(raw.kvCacheK, KV_TYPES, ""),

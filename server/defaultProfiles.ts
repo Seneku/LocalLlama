@@ -10,6 +10,8 @@ const baseProfile = {
   mmap: true,
   fit: false,
   fitTargetMiB: 0,
+  cpuMoe: false,
+  nCpuMoe: 0,
   temperature: 0.8,
   parallelSlots: 1,
   kvCacheK: "",

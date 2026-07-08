@@ -42,6 +42,8 @@ export interface LlamaProfile {
   mmap: boolean; // false → --no-mmap (llama.cpp memory-maps by default)
   fit: boolean; // --fit on: let llama.cpp auto-size unset args to fit VRAM
   fitTargetMiB: number; // --fit-target: free-memory margin per device (0 = unset)
+  cpuMoe: boolean; // --cpu-moe: keep all MoE expert weights on the CPU
+  nCpuMoe: number; // --n-cpu-moe N: keep the first N layers' experts on CPU (0 = unset; ignored when cpuMoe)
   temperature: number; // --temp (default sampling temperature)
   parallelSlots: number;
   kvCacheK: KvCacheType;

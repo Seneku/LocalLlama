@@ -186,6 +186,19 @@ export function ProfileEditor({
           disabled={!draft.fit}
           onChange={(value) => updateDraft("fitTargetMiB", value)}
         />
+        <ToggleField
+          label="MoE experts on CPU"
+          hint="--cpu-moe: keep all expert weights in RAM (big MoE speedup on small GPUs)"
+          checked={draft.cpuMoe}
+          onChange={(value) => updateDraft("cpuMoe", value)}
+        />
+        <NumberField
+          label="CPU-expert layers"
+          value={draft.nCpuMoe}
+          min={0}
+          disabled={draft.cpuMoe}
+          onChange={(value) => updateDraft("nCpuMoe", value)}
+        />
         <SelectField<ThreadsMode>
           label="Threads"
           value={draft.threadsMode}

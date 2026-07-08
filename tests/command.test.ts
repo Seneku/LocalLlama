@@ -89,6 +89,26 @@ describe("buildCommand", () => {
     expect(line).toContain("--spec-draft-p-min 0.75");
   });
 
+  test("emits MoE expert-offload flags", () => {
+    const gemma = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
+    const all = buildCommand({ ...gemma, cpuMoe: true }, { paths, defaultThreads: 12, fileExists: exists }).args.join(" ");
+    expect(all).toContain("--cpu-moe");
+
+    const firstN = buildCommand(
+      { ...gemma, cpuMoe: false, nCpuMoe: 20 },
+      { paths, defaultThreads: 12, fileExists: exists }
+    ).args.join(" ");
+    expect(firstN).toContain("--n-cpu-moe 20");
+
+    // --cpu-moe wins over --n-cpu-moe when both are set.
+    const both = buildCommand(
+      { ...gemma, cpuMoe: true, nCpuMoe: 20 },
+      { paths, defaultThreads: 12, fileExists: exists }
+    ).args.join(" ");
+    expect(both).toContain("--cpu-moe");
+    expect(both).not.toContain("--n-cpu-moe");
+  });
+
   test("omits fit-target and no-mmap at their defaults", () => {
     const profile = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
     const line = buildCommand(profile, { paths, defaultThreads: 12, fileExists: exists }).args.join(" ");

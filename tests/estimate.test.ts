@@ -68,6 +68,7 @@ function gemmaLayout(): GgufTensorLayout {
   const layers = Array.from({ length: 48 }, (_, index) => ({
     index,
     bytes: 130 * MIB,
+    expertBytes: 0,
     // Every 6th layer (5, 11, ...) is full attention: 1 KV head x 512 dims.
     // SWA layers: 8 KV heads x 256 dims.
     attnKElements: (index + 1) % 6 === 0 ? 512 : 2048,
@@ -110,6 +111,7 @@ function hybridLayout(): GgufTensorLayout {
     return {
       index,
       bytes: 146 * MIB,
+      expertBytes: 0,
       attnKElements: attention ? 1024 : null,
       attnVElements: attention ? 1024 : null,
       recurrent: !attention
@@ -270,5 +272,75 @@ describe("appleWorkingSetMiB", () => {
     expect(appleWorkingSetMiB(16384, null)).toBe(Math.floor(16384 * 0.67));
     expect(appleWorkingSetMiB(65536, null)).toBe(Math.floor(65536 * 0.75));
     expect(appleWorkingSetMiB(65536, 0)).toBe(Math.floor(65536 * 0.75)); // 0 = default, not an override
+  });
+});
+
+// A3B-style MoE: 32 layers, most of each layer's weight is routed experts.
+function moeLayout(): GgufTensorLayout {
+  const layers = Array.from({ length: 32 }, (_, index) => ({
+    index,
+    bytes: 500 * MIB,
+    expertBytes: 450 * MIB, // the bulk is routed experts
+    attnKElements: 1024,
+    attnVElements: 1024,
+    recurrent: false
+  }));
+  return {
+    layers,
+    tokenEmbdBytes: 200 * MIB,
+    outputBytes: 200 * MIB,
+    otherBytes: 4 * MIB,
+    totalBytes: 32 * 500 * MIB + 404 * MIB,
+    exact: true
+  };
+}
+
+const moeMetadata: ModelMetadata = {
+  ...emptyMetadata,
+  architecture: "qwen35moe",
+  name: "MoE test",
+  parameterSize: "35B",
+  fileType: 15,
+  fileSizeMiB: 32 * 500 + 404,
+  blockCount: 32,
+  contextLength: 131072,
+  embeddingLength: 4096,
+  headCount: 32,
+  headCountKv: 8,
+  keyLength: 128,
+  valueLength: 128
+};
+
+describe("MoE expert offload (--cpu-moe / --n-cpu-moe)", () => {
+  test("--cpu-moe moves expert weights off the GPU and onto system RAM", async () => {
+    const opts = { hardware, metadata: moeMetadata, layout: moeLayout(), fileExists: () => true };
+    const base = await estimateProfileMemory(
+      makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 8192, parallelSlots: 1 }),
+      opts
+    );
+    const moe = await estimateProfileMemory(
+      makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 8192, parallelSlots: 1, cpuMoe: true }),
+      opts
+    );
+
+    // ~32 x 450 MiB of experts leaves the GPU (well over 10 GiB less VRAM).
+    expect(base.breakdown.gpuModelWeightsMiB - moe.breakdown.gpuModelWeightsMiB).toBeGreaterThan(10000);
+    expect(moe.estimatedSystemRamMiB).toBeGreaterThan(base.estimatedSystemRamMiB);
+    expect(moe.assumptions.some((item) => item.includes("--cpu-moe"))).toBe(true);
+  });
+
+  test("--n-cpu-moe offloads only the first N layers' experts", async () => {
+    const opts = { hardware, metadata: moeMetadata, layout: moeLayout(), fileExists: () => true };
+    const all = await estimateProfileMemory(
+      makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 8192, parallelSlots: 1, cpuMoe: true }),
+      opts
+    );
+    const half = await estimateProfileMemory(
+      makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 8192, parallelSlots: 1, nCpuMoe: 16 }),
+      opts
+    );
+
+    // Offloading 16 of 32 expert layers frees less VRAM than offloading all 32.
+    expect(half.breakdown.gpuModelWeightsMiB).toBeGreaterThan(all.breakdown.gpuModelWeightsMiB);
   });
 });
