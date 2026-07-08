@@ -142,6 +142,14 @@ export function ProfileEditor({
           max={65535}
           onChange={(value) => updateDraft("port", value)}
         />
+        <NumberField
+          label="Temperature"
+          value={draft.temperature}
+          min={0}
+          max={2}
+          step={0.1}
+          onChange={(value) => updateDraft("temperature", value)}
+        />
         <ToggleField
           label="Jinja templates"
           checked={draft.jinja}
@@ -163,6 +171,20 @@ export function ProfileEditor({
           min={0}
           max={999}
           onChange={(value) => updateDraft("gpuLayers", value)}
+        />
+        <ToggleField
+          label="Auto-fit VRAM"
+          hint="--fit on: llama.cpp sizes unset args to fit"
+          checked={draft.fit}
+          onChange={(value) => updateDraft("fit", value)}
+        />
+        <NumberField
+          label="Fit target (MiB)"
+          value={draft.fitTargetMiB}
+          min={0}
+          step={128}
+          disabled={!draft.fit}
+          onChange={(value) => updateDraft("fitTargetMiB", value)}
         />
         <SelectField<ThreadsMode>
           label="Threads"
@@ -190,6 +212,12 @@ export function ProfileEditor({
           hint="Pin model in RAM"
           checked={draft.mlock}
           onChange={(value) => updateDraft("mlock", value)}
+        />
+        <ToggleField
+          label="Memory-map (mmap)"
+          hint="Off adds --no-mmap"
+          checked={draft.mmap}
+          onChange={(value) => updateDraft("mmap", value)}
         />
         <SelectField<KvCacheType>
           label="KV cache K"
@@ -239,6 +267,28 @@ export function ProfileEditor({
               value={draft.speculative.draftGpuLayers}
               min={0}
               onChange={(value) => updateSpec("draftGpuLayers", value)}
+            />
+            <NumberField
+              label="Draft p-min"
+              value={draft.speculative.draftPMin}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(value) => updateSpec("draftPMin", value)}
+            />
+            <SelectField<KvCacheType>
+              label="Draft KV cache K"
+              value={draft.speculative.draftCacheK}
+              options={["", "f16", "q8_0", "q4_0", "q4_1"]}
+              labels={{ "": "default" }}
+              onChange={(value) => updateSpec("draftCacheK", value)}
+            />
+            <SelectField<KvCacheType>
+              label="Draft KV cache V"
+              value={draft.speculative.draftCacheV}
+              options={["", "f16", "q8_0", "q4_0", "q4_1"]}
+              labels={{ "": "default" }}
+              onChange={(value) => updateSpec("draftCacheV", value)}
             />
             <TextField
               label="Draft model"

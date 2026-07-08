@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { defaultProfiles } from "./defaultProfiles";
+import { normalizeProfile } from "./normalize";
 import { getRuntimePaths } from "./paths";
 import type { LlamaProfile } from "../src/shared/types";
 
@@ -49,11 +50,14 @@ export function createProfileStore(profilesFile?: string): ProfileStore {
       }
       await ensureSeedFile();
       const raw = await readFile(filePath, "utf8");
-      const parsed = JSON.parse(raw) as LlamaProfile[];
+      const parsed = JSON.parse(raw) as unknown;
       if (!Array.isArray(parsed)) {
         throw new Error("profiles.json must contain an array of profiles");
       }
-      cache = parsed;
+      // Normalize on read so profiles saved before newer fields existed are
+      // backfilled with defaults (e.g. temperature, mmap, fit) — keeps the UI
+      // controlled and the command builder complete.
+      cache = parsed.map(normalizeProfile);
       return cache;
     },
     async save(profiles) {

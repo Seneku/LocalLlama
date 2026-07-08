@@ -7,6 +7,10 @@ const baseProfile = {
   threads: 0,
   jinja: false,
   mlock: false,
+  mmap: true,
+  fit: false,
+  fitTargetMiB: 0,
+  temperature: 0.8,
   parallelSlots: 1,
   kvCacheK: "",
   kvCacheV: "",
@@ -15,7 +19,10 @@ const baseProfile = {
     type: "none",
     draftNMax: 0,
     draftModelPath: "",
-    draftGpuLayers: 0
+    draftGpuLayers: 0,
+    draftCacheK: "",
+    draftCacheV: "",
+    draftPMin: 0
   }
 } satisfies Partial<LlamaProfile>;
 
@@ -86,7 +93,10 @@ export const exampleProfiles: LlamaProfile[] = [
       type: "draft-mtp",
       draftNMax: 3,
       draftModelPath: "",
-      draftGpuLayers: 0
+      draftGpuLayers: 0,
+      draftCacheK: "q8_0",
+      draftCacheV: "q8_0",
+      draftPMin: 0
     }
   }
 ];

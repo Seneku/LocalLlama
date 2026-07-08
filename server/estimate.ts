@@ -604,6 +604,9 @@ export async function estimateProfileMemory(
   if (profile.gpuLayers >= 99) {
     assumptions.push("GPU layers 99+ is treated as full model offload.");
   }
+  if (profile.fit) {
+    assumptions.push("--fit on lets llama.cpp auto-size offload to fit VRAM; this estimate uses the profile's GPU-layers value.");
+  }
   if (profile.speculative.enabled && !profile.speculative.draftModelPath.trim()) {
     assumptions.push("Bundled MTP heads are treated as part of the main GGUF file.");
   }

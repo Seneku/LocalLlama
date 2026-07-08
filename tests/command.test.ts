@@ -62,6 +62,39 @@ describe("buildCommand", () => {
     expect(preview.args).toContain("draft-mtp");
     expect(preview.args).toContain("--spec-draft-n-max");
     expect(preview.args).toContain("3");
+    // Draft-model KV cache quant.
+    expect(preview.args).toContain("-ctkd");
+    expect(preview.args).toContain("-ctvd");
+    // Temperature is always emitted (defaults to the llama.cpp default).
+    expect(preview.args).toContain("--temp");
+    expect(preview.args).toContain("0.8");
+  });
+
+  test("emits fit, no-mmap, temperature, and draft-p-min flags", () => {
+    const orinth = exampleProfiles.find((item) => item.id === "orinth9b-mtp-coding")!;
+    const profile = {
+      ...orinth,
+      mmap: false,
+      fit: true,
+      fitTargetMiB: 512,
+      temperature: 0,
+      speculative: { ...orinth.speculative, draftPMin: 0.75 }
+    };
+    const line = buildCommand(profile, { paths, defaultThreads: 8, fileExists: exists }).args.join(" ");
+
+    expect(line).toContain("--no-mmap");
+    expect(line).toContain("--fit on");
+    expect(line).toContain("--fit-target 512");
+    expect(line).toContain("--temp 0");
+    expect(line).toContain("--spec-draft-p-min 0.75");
+  });
+
+  test("omits fit-target and no-mmap at their defaults", () => {
+    const profile = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
+    const line = buildCommand(profile, { paths, defaultThreads: 12, fileExists: exists }).args.join(" ");
+
+    expect(line).not.toContain("--no-mmap"); // mmap defaults on
+    expect(line).not.toContain("--fit"); // fit defaults off
   });
 
   test("uses manual overrides for custom tuning", () => {

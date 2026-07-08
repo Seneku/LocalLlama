@@ -18,6 +18,9 @@ export interface SpeculativeSettings {
   draftNMax: number;
   draftModelPath: string;
   draftGpuLayers: number;
+  draftCacheK: KvCacheType; // -ctkd / --cache-type-k-draft
+  draftCacheV: KvCacheType; // -ctvd / --cache-type-v-draft
+  draftPMin: number; // --spec-draft-p-min (0 = leave unset)
 }
 
 export interface LlamaProfile {
@@ -36,6 +39,10 @@ export interface LlamaProfile {
   reasoning: ReasoningMode;
   jinja: boolean;
   mlock: boolean;
+  mmap: boolean; // false → --no-mmap (llama.cpp memory-maps by default)
+  fit: boolean; // --fit on: let llama.cpp auto-size unset args to fit VRAM
+  fitTargetMiB: number; // --fit-target: free-memory margin per device (0 = unset)
+  temperature: number; // --temp (default sampling temperature)
   parallelSlots: number;
   kvCacheK: KvCacheType;
   kvCacheV: KvCacheType;

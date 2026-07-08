@@ -84,12 +84,23 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
   if (profile.mlock) {
     args.push("--mlock");
   }
+  // llama.cpp memory-maps the model by default; only pass the flag to disable it.
+  if (!profile.mmap) {
+    args.push("--no-mmap");
+  }
   // CUDA and Metal both offload layers with -ngl (Metal via unified memory).
   if (backend !== "CPU" && profile.gpuLayers > 0) {
     args.push("-ngl", String(Math.floor(profile.gpuLayers)));
   }
   if (backend === "CPU" && profile.gpuLayers > 0) {
     warnings.push("GPU layers are ignored when the CPU backend is selected.");
+  }
+  // Let llama.cpp auto-size unset args to fit device memory.
+  if (profile.fit) {
+    args.push("--fit", "on");
+    if (profile.fitTargetMiB > 0) {
+      args.push("--fit-target", String(Math.floor(profile.fitTargetMiB)));
+    }
   }
   if (profile.parallelSlots > 0) {
     args.push("-np", String(positiveInteger(profile.parallelSlots, 1)));
@@ -100,6 +111,7 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
   if (profile.kvCacheV) {
     args.push("-ctv", profile.kvCacheV);
   }
+  args.push("--temp", String(Math.max(0, profile.temperature)));
   if (profile.speculative.enabled) {
     args.push("--spec-type", profile.speculative.type);
     if (profile.speculative.draftModelPath.trim()) {
@@ -110,6 +122,15 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
     }
     if (profile.speculative.draftGpuLayers > 0) {
       args.push("--spec-draft-ngl", String(Math.floor(profile.speculative.draftGpuLayers)));
+    }
+    if (profile.speculative.draftCacheK) {
+      args.push("-ctkd", profile.speculative.draftCacheK);
+    }
+    if (profile.speculative.draftCacheV) {
+      args.push("-ctvd", profile.speculative.draftCacheV);
+    }
+    if (profile.speculative.draftPMin > 0) {
+      args.push("--spec-draft-p-min", String(profile.speculative.draftPMin));
     }
   }
 

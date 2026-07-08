@@ -46,7 +46,10 @@ function normalizeSpeculative(value: unknown): SpeculativeSettings {
     type: oneOf(raw.type, SPEC_TYPES, "none"),
     draftNMax: num(raw.draftNMax, 0),
     draftModelPath: str(raw.draftModelPath, ""),
-    draftGpuLayers: num(raw.draftGpuLayers, 0)
+    draftGpuLayers: num(raw.draftGpuLayers, 0),
+    draftCacheK: oneOf(raw.draftCacheK, KV_TYPES, ""),
+    draftCacheV: oneOf(raw.draftCacheV, KV_TYPES, ""),
+    draftPMin: num(raw.draftPMin, 0)
   };
 }
 
@@ -73,6 +76,10 @@ export function normalizeProfile(input: unknown): LlamaProfile {
     reasoning: oneOf(raw.reasoning, REASONING_MODES, "off"),
     jinja: bool(raw.jinja, false),
     mlock: bool(raw.mlock, false),
+    mmap: bool(raw.mmap, true),
+    fit: bool(raw.fit, false),
+    fitTargetMiB: num(raw.fitTargetMiB, 0),
+    temperature: num(raw.temperature, 0.8),
     parallelSlots: num(raw.parallelSlots, 1),
     kvCacheK: oneOf(raw.kvCacheK, KV_TYPES, ""),
     kvCacheV: oneOf(raw.kvCacheV, KV_TYPES, ""),
