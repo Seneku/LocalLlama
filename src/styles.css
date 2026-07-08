@@ -813,6 +813,58 @@ h1 {
   color: var(--text-bright);
 }
 
+/* Inline label + hover help icon */
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.field-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-faint);
+  cursor: help;
+}
+
+.field-help:hover,
+.field-help:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+.field-help-popup {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: -8px;
+  z-index: 30;
+  width: max-content;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-modal);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--font-sm);
+  font-weight: 450;
+  line-height: 1.4;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.field-help:hover .field-help-popup,
+.field-help:focus-visible .field-help-popup {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .field span,
 .toggle-field span {
   color: var(--text-label);

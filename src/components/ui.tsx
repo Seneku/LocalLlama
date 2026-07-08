@@ -1,5 +1,26 @@
-import { Check, Copy, FolderOpen } from "lucide-react";
+import { Check, Copy, FolderOpen, HelpCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+
+/** A small info icon that reveals an explanatory popup on hover/focus. */
+export function FieldHelp({ text }: { text: string }) {
+  return (
+    <span className="field-help" tabIndex={0} role="note" aria-label={text}>
+      <HelpCircle size={13} />
+      <span className="field-help-popup" role="tooltip">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function FieldLabel({ label, help }: { label: string; help?: string }) {
+  return (
+    <span className="field-label">
+      {label}
+      {help ? <FieldHelp text={help} /> : null}
+    </span>
+  );
+}
 
 interface TextFieldProps {
   label: string;
@@ -7,6 +28,7 @@ interface TextFieldProps {
   wide?: boolean;
   placeholder?: string;
   type?: "text" | "password";
+  help?: string;
   /** When set, renders a Browse button that opens a native picker. */
   onBrowse?(): void;
   browseTitle?: string;
@@ -20,6 +42,7 @@ export function TextField({
   wide = false,
   placeholder,
   type = "text",
+  help,
   onBrowse,
   browseTitle = "Browse…",
   browseBusy = false,
@@ -37,7 +60,7 @@ export function TextField({
   );
   return (
     <label className={`field ${wide ? "wide" : ""}`}>
-      <span>{label}</span>
+      <FieldLabel label={label} help={help} />
       {onBrowse ? (
         <div className="field-with-browse">
           {input}
@@ -65,10 +88,11 @@ interface NumberFieldProps {
   max?: number;
   step?: number;
   disabled?: boolean;
+  help?: string;
   onChange(value: number): void;
 }
 
-export function NumberField({ label, value, min, max, step, disabled = false, onChange }: NumberFieldProps) {
+export function NumberField({ label, value, min, max, step, disabled = false, help, onChange }: NumberFieldProps) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
 
@@ -106,7 +130,7 @@ export function NumberField({ label, value, min, max, step, disabled = false, on
 
   return (
     <label className="field">
-      <span>{label}</span>
+      <FieldLabel label={label} help={help} />
       <input
         type="number"
         value={text}
@@ -127,13 +151,14 @@ interface SelectFieldProps<T extends string> {
   value: T;
   options: readonly T[];
   labels?: Partial<Record<T, string>>;
+  help?: string;
   onChange(value: T): void;
 }
 
-export function SelectField<T extends string>({ label, value, options, labels = {}, onChange }: SelectFieldProps<T>) {
+export function SelectField<T extends string>({ label, value, options, labels = {}, help, onChange }: SelectFieldProps<T>) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <FieldLabel label={label} help={help} />
       <select value={value} onChange={(event) => onChange(event.target.value as T)}>
         {options.map((option) => (
           <option key={option} value={option}>
@@ -149,14 +174,18 @@ interface ToggleFieldProps {
   label: string;
   checked: boolean;
   hint?: string;
+  help?: string;
   onChange(value: boolean): void;
 }
 
-export function ToggleField({ label, checked, hint, onChange }: ToggleFieldProps) {
+export function ToggleField({ label, checked, hint, help, onChange }: ToggleFieldProps) {
   return (
     <label className="toggle-field">
       <span>
-        {label}
+        <span className="field-label">
+          {label}
+          {help ? <FieldHelp text={help} /> : null}
+        </span>
         {hint ? <small>{hint}</small> : null}
       </span>
       <input
