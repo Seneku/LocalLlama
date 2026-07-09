@@ -1,4 +1,4 @@
-import { Activity, Database, Play, Plug, Plus, RefreshCw, Server, Square, Terminal } from "lucide-react";
+import { Activity, Database, Play, Plug, Plus, RefreshCw, Server, Square, Terminal, Wand2 } from "lucide-react";
 
 import { LogView } from "../components/LogView";
 import { ProfileEditor } from "../components/ProfileEditor";
@@ -35,6 +35,7 @@ interface ServerViewProps {
   stopServer(): Promise<void>;
   restartServer(): Promise<void>;
   onOpenConnect(): void;
+  onOptimize(): void;
   notify: Notify;
 }
 
@@ -61,6 +62,7 @@ export function ServerView({
   stopServer,
   restartServer,
   onOpenConnect,
+  onOptimize,
   notify
 }: ServerViewProps) {
   return (
@@ -153,6 +155,14 @@ export function ServerView({
             <button title="Restart server" onClick={restartServer} disabled={busy || !draft}>
               <RefreshCw size={17} />
               Restart
+            </button>
+            <button
+              title="Benchmark a few setting combinations and apply the fastest (stops nothing; runs while the server is stopped)"
+              onClick={onOptimize}
+              disabled={busy || running || !draft}
+            >
+              <Wand2 size={17} />
+              Optimize
             </button>
           </div>
           <dl className="status-list">

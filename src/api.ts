@@ -14,10 +14,15 @@ import type {
   ModelFilesResponse,
   ModelSearchResult,
   RecommendedResponse,
+  RemoteModelEstimate,
   RuntimeConfig,
   RuntimeLog,
   RuntimeStatus,
-  SettingsResponse
+  SettingsResponse,
+  SweepAxisId,
+  SweepPlan,
+  SweepResult,
+  SweepStatus
 } from "./shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -103,11 +108,29 @@ export const api = {
     request<{ ok: boolean }>(`/api/benchmarks/${encodeURIComponent(id)}`, {
       method: "DELETE"
     }),
+  sweepPlan: (profileId: string, opts: { axes?: SweepAxisId[]; quick?: boolean } = {}) =>
+    request<SweepPlan>("/api/sweeps/plan", {
+      method: "POST",
+      body: JSON.stringify({ profileId, ...opts })
+    }),
+  startSweep: (profileId: string, plan: SweepPlan) =>
+    request<SweepStatus>("/api/sweeps/start", {
+      method: "POST",
+      body: JSON.stringify({ profileId, plan })
+    }),
+  sweepStatus: () => request<SweepStatus>("/api/sweeps/status"),
+  stopSweep: () => request<SweepStatus>("/api/sweeps/stop", { method: "POST" }),
+  sweepResult: (id?: string) =>
+    request<SweepResult>(`/api/sweeps/result${id ? `?id=${encodeURIComponent(id)}` : ""}`),
   llamaCppRelease: () => request<LlamaCppRelease>("/api/llamacpp/latest"),
   searchModels: (query: string, sort = "downloads") =>
     request<ModelSearchResult[]>(`/api/models/search?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(sort)}`),
   recommendedModels: () => request<RecommendedResponse>("/api/models/recommended"),
   modelFiles: (id: string) => request<ModelFilesResponse>(`/api/models/files?id=${encodeURIComponent(id)}`),
+  remoteEstimate: (id: string, file: string, context: number, sizeBytes: number) =>
+    request<RemoteModelEstimate>(
+      `/api/models/estimate?id=${encodeURIComponent(id)}&file=${encodeURIComponent(file)}&context=${context}&size=${sizeBytes}`
+    ),
   startDownload: (id: string, filename: string) =>
     request<DownloadStatus>("/api/models/download", {
       method: "POST",

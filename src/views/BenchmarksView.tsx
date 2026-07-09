@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -10,6 +11,8 @@ import {
   SlidersHorizontal,
   Square,
   Trash2,
+  Trophy,
+  Wand2,
   X,
   Zap
 } from "lucide-react";
@@ -31,7 +34,9 @@ import type {
   FlashAttentionMode,
   LlamaProfile,
   ResolvedBackend,
-  RuntimeLog
+  RuntimeLog,
+  SweepResult,
+  SweepStatus
 } from "../shared/types";
 
 const defaultSettings: BenchmarkSettings = {
@@ -82,6 +87,8 @@ interface BenchmarksViewProps {
   runtimeRunning: boolean;
   busy: boolean;
   saveDraft(): Promise<LlamaProfile | null>;
+  onOptimize(): void;
+  onApplySettings(settings: Partial<LlamaProfile>): void;
   onMessage: Notify;
 }
 
@@ -121,6 +128,17 @@ function sortValue(run: BenchmarkRun, key: SortKey): number {
   }
 }
 
+const idleSweep: SweepStatus = {
+  state: "idle",
+  sweepId: null,
+  profileId: null,
+  profileName: null,
+  completedRuns: 0,
+  totalRuns: 0,
+  currentCandidate: null,
+  startedAt: null
+};
+
 export function BenchmarksView({
   draft,
   selectedProfile,
@@ -128,6 +146,8 @@ export function BenchmarksView({
   runtimeRunning,
   busy,
   saveDraft,
+  onOptimize,
+  onApplySettings,
   onMessage
 }: BenchmarksViewProps) {
   const [settings, setSettings] = useState<BenchmarkSettings>(defaultSettings);
@@ -144,6 +164,11 @@ export function BenchmarksView({
   });
   const [logs, setLogs] = useState<RuntimeLog[]>([]);
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [sweepStatus, setSweepStatus] = useState<SweepStatus>(idleSweep);
+  const [sweepResult, setSweepResult] = useState<SweepResult | null>(null);
+  const [sweepDismissed, setSweepDismissed] = useState<string | null>(null);
+  const sweepWasRunning = useRef(false);
+  const loadedSweepResult = useRef(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [profileFilter, setProfileFilter] = useState<string>("all");
   const [backendFilter, setBackendFilter] = useState<ResolvedBackend | "all">("all");
@@ -157,6 +182,7 @@ export function BenchmarksView({
   const tableRef = useRef<HTMLDivElement | null>(null);
 
   const running = status.state === "running";
+  const sweepRunning = sweepStatus.state === "running";
   // Config strip: open until the first run exists, then collapsed unless toggled.
   const showConfig = configOpen ?? (loaded && runs.length === 0);
 
@@ -225,28 +251,46 @@ export function BenchmarksView({
         return;
       }
       try {
-        const [nextRuns, nextStatus, nextLogs] = await Promise.all([
+        const [nextRuns, nextStatus, nextLogs, nextSweep] = await Promise.all([
           api.benchmarks(),
           api.benchmarkStatus(),
-          api.benchmarkLogs()
+          api.benchmarkLogs(),
+          api.sweepStatus().catch(() => idleSweep)
         ]);
         if (disposed) {
           return;
         }
         setRuns((prev) => (sameRuns(prev, nextRuns) ? prev : nextRuns));
         setStatus((prev) => (JSON.stringify(prev) === JSON.stringify(nextStatus) ? prev : nextStatus));
+        setSweepStatus((prev) => (JSON.stringify(prev) === JSON.stringify(nextSweep) ? prev : nextSweep));
         setLogs((prev) =>
           prev.length === nextLogs.length && prev[prev.length - 1]?.id === nextLogs[nextLogs.length - 1]?.id
             ? prev
             : nextLogs
         );
         setLoaded(true);
+        // A sweep just finished (or a finished one exists from before this
+        // mount): pull its verdict for the winner card.
+        if (nextSweep.state === "running") {
+          sweepWasRunning.current = true;
+        } else if (sweepWasRunning.current || !loadedSweepResult.current) {
+          sweepWasRunning.current = false;
+          loadedSweepResult.current = true;
+          api
+            .sweepResult()
+            .then((result) => {
+              if (!disposed) {
+                setSweepResult(result);
+              }
+            })
+            .catch(() => undefined);
+        }
       } catch {
         // Polling stays quiet; direct actions surface their own errors.
       }
     };
     void refresh(true);
-    const timer = window.setInterval(() => void refresh(), running ? 1500 : 5000);
+    const timer = window.setInterval(() => void refresh(), running || sweepStatus.state === "running" ? 1500 : 5000);
     const onVisible = () => {
       if (!document.hidden) {
         void refresh();
@@ -258,7 +302,8 @@ export function BenchmarksView({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [running]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, sweepStatus.state]);
 
   useEffect(() => {
     if (!draft) {
@@ -327,6 +372,30 @@ export function BenchmarksView({
     }
   }
 
+  async function stopSweep() {
+    setBenchmarkBusy(true);
+    try {
+      await api.stopSweep();
+      onMessage("Sweep stop requested — partial results will still be ranked.", "info");
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setBenchmarkBusy(false);
+    }
+  }
+
+  function applySweepSettings() {
+    if (!sweepResult || Object.keys(sweepResult.bestSettings).length === 0) {
+      return;
+    }
+    if (draft && draft.id !== sweepResult.profileId) {
+      onMessage(`This sweep tuned "${sweepResult.profileName}" — select that profile to apply its settings.`, "error");
+      return;
+    }
+    onApplySettings(sweepResult.bestSettings);
+    onMessage("Winning settings applied to the profile draft — save the profile to keep them.", "success");
+  }
+
   async function deleteRun(id: string) {
     setBenchmarkBusy(true);
     try {
@@ -393,16 +462,63 @@ export function BenchmarksView({
           {status.profileName ? <span className="status-name">{status.profileName}</span> : null}
         </div>
         <div className="bench-header-actions">
-          <button className="primary" title="Run benchmark" onClick={runBenchmark} disabled={controlsDisabled || running}>
+          <button
+            title="Find the fastest settings for this profile automatically"
+            onClick={onOptimize}
+            disabled={controlsDisabled || running || sweepRunning}
+          >
+            <Wand2 size={17} />
+            Optimize
+          </button>
+          <button
+            className="primary"
+            title="Run benchmark"
+            onClick={runBenchmark}
+            disabled={controlsDisabled || running || sweepRunning}
+          >
             <Play size={17} />
             Run benchmark
           </button>
-          <button title="Stop benchmark" onClick={stopBenchmark} disabled={controlsDisabled || !running}>
+          <button title="Stop benchmark" onClick={stopBenchmark} disabled={controlsDisabled || !running || sweepRunning}>
             <Square size={17} />
             Stop
           </button>
         </div>
       </div>
+
+      {sweepRunning ? (
+        <div className="bench-panel sweep-progress">
+          <div className="panel-title compact">
+            <Wand2 size={18} />
+            <span>Optimizing {sweepStatus.profileName ?? ""}</span>
+            <small className="panel-hint">
+              run {Math.min(sweepStatus.completedRuns + 1, Math.max(1, sweepStatus.totalRuns))} of ~{sweepStatus.totalRuns}
+              {sweepStatus.currentCandidate ? ` · ${sweepStatus.currentCandidate}` : ""}
+            </small>
+            <button title="Stop the sweep" onClick={stopSweep} disabled={benchmarkBusy}>
+              <Square size={15} />
+              Stop sweep
+            </button>
+          </div>
+          <div className="sweep-progress-bar">
+            <i
+              style={{
+                width: `${Math.min(100, (sweepStatus.completedRuns / Math.max(1, sweepStatus.totalRuns)) * 100)}%`
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {!sweepRunning && sweepResult && sweepResult.sweepId !== sweepDismissed && sweepResult.ranked.length > 0 ? (
+        <SweepResultCard
+          result={sweepResult}
+          runs={runs}
+          onApply={applySweepSettings}
+          onFocusRun={focusRun}
+          onDismiss={() => setSweepDismissed(sweepResult.sweepId)}
+        />
+      ) : null}
 
       <div className="bench-panel">
         <button className="bench-config-toggle" onClick={() => setConfigOpen(!showConfig)}>
@@ -708,6 +824,7 @@ export function BenchmarksView({
                 <span>
                   <strong>{run.profileName}</strong>
                   <small>{new Date(run.createdAt).toLocaleString()}</small>
+                  {run.sweepLabel ? <small className="sweep-tag">⚡ {run.sweepLabel}</small> : null}
                   {run.status !== "completed" ? <small className={`run-status ${run.status}`}>{run.status}</small> : null}
                 </span>
                 {hasEnvColumns ? (
@@ -750,6 +867,74 @@ export function BenchmarksView({
         <LogView logs={logs} height={150} emptyText="No benchmark logs yet." />
       </div>
     </section>
+  );
+}
+
+interface SweepResultCardProps {
+  result: SweepResult;
+  runs: BenchmarkRun[];
+  onApply(): void;
+  onFocusRun(runId: string): void;
+  onDismiss(): void;
+}
+
+function SweepResultCard({ result, runs, onApply, onFocusRun, onDismiss }: SweepResultCardProps) {
+  const winner = result.ranked.find((entry) => entry.runId === result.winnerRunId) ?? result.ranked[0];
+  const baselineRun = runs.find((run) => run.id === result.baselineRunId) ?? null;
+  const baselineScore = baselineRun?.metrics.score ?? null;
+  const improvement =
+    winner?.score !== null && winner !== undefined && baselineScore ? ((winner.score - baselineScore) / baselineScore) * 100 : null;
+  const hasSettings = Object.keys(result.bestSettings).length > 0;
+
+  return (
+    <div className="bench-panel sweep-result">
+      <div className="panel-title compact">
+        <Trophy size={18} />
+        <span>Optimize result — {result.profileName}</span>
+        {result.status !== "completed" ? <span className={`state-chip stopped`}>{result.status}</span> : null}
+        <button className="icon-button" title="Dismiss" onClick={onDismiss}>
+          <X size={15} />
+        </button>
+      </div>
+      <div className="sweep-verdict">
+        <div className="sweep-winner">
+          <strong>{winner?.label ?? "no result"}</strong>
+          <small>
+            benchmark-measured score {formatNumber(winner?.score ?? null)}
+            {improvement !== null && Math.abs(improvement) >= 0.05
+              ? ` · ${improvement > 0 ? "+" : ""}${improvement.toFixed(1)}% vs baseline`
+              : " · matches the baseline"}
+          </small>
+        </div>
+        <button className="primary" onClick={onApply} disabled={!hasSettings} title="Merge the winning settings into the profile draft">
+          <Check size={16} />
+          Apply best settings
+        </button>
+      </div>
+      <div className="sweep-ranked">
+        {result.ranked.slice(0, 8).map((entry, index) => (
+          <button key={entry.runId} className="sweep-ranked-row" onClick={() => onFocusRun(entry.runId)}>
+            <span className="rank">{index + 1}.</span>
+            <span className="label">
+              {entry.label}
+              {entry.runId === result.winnerRunId ? <Trophy size={12} /> : null}
+            </span>
+            <span className="score">
+              {formatNumber(entry.score)}
+              {entry.scoreStddev ? <small> ± {formatNumber(entry.scoreStddev)}</small> : null}
+            </span>
+            {entry.withinNoiseOfBest ? <span className="pill muted">statistically tied</span> : null}
+          </button>
+        ))}
+      </div>
+      {result.notes.length > 0 ? (
+        <div className="warnings">
+          {result.notes.map((note) => (
+            <span key={note}>{note}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

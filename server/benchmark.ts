@@ -298,6 +298,7 @@ export class BenchmarkManager {
   private buffers: Record<"stdout" | "stderr", string> = { stdout: "", stderr: "" };
   private stdout = "";
   private stderr = "";
+  private onComplete: ((run: BenchmarkRun) => void) | null = null;
 
   constructor(private readonly store: BenchmarkStore = createBenchmarkStore()) {}
 
@@ -316,7 +317,16 @@ export class BenchmarkManager {
     return this.logs;
   }
 
-  async start(profile: LlamaProfile, settings?: Partial<BenchmarkSettings>): Promise<BenchmarkRun> {
+  async start(
+    profile: LlamaProfile,
+    settings?: Partial<BenchmarkSettings>,
+    extras?: {
+      sweepId?: string;
+      sweepLabel?: string;
+      /** Invoked once with the persisted final run (any status). Used by the sweep orchestrator. */
+      onComplete?: (run: BenchmarkRun) => void;
+    }
+  ): Promise<BenchmarkRun> {
     if (this.process) {
       throw new Error(`A benchmark is already running for ${this.activeRun?.profileName ?? "another profile"}.`);
     }
@@ -326,6 +336,7 @@ export class BenchmarkManager {
     if (validation.errors.length > 0) {
       throw new Error(validation.errors.join("\n"));
     }
+    this.onComplete = extras?.onComplete ?? null;
 
     this.stopRequested = false;
     this.logs = [];
@@ -349,6 +360,8 @@ export class BenchmarkManager {
       rows: [],
       metrics: calculateBenchmarkMetrics([], new Date().toISOString(), null),
       env: null,
+      sweepId: extras?.sweepId ?? null,
+      sweepLabel: extras?.sweepLabel ?? null,
       stdout: "",
       stderr: "",
       error: null
@@ -442,6 +455,15 @@ export class BenchmarkManager {
     this.process = null;
     await this.store.upsert(completedRun);
     this.appendLog("system", `Benchmark ${status}.`);
+    const callback = this.onComplete;
+    this.onComplete = null;
+    if (callback) {
+      try {
+        callback(completedRun);
+      } catch {
+        // A sweep-side callback failure must not break benchmark bookkeeping.
+      }
+    }
   }
 
   private appendChunk(stream: "stdout" | "stderr", chunk: Buffer): void {

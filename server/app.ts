@@ -8,14 +8,17 @@ import { pickPath, type PickMode } from "./dialog";
 import { DownloadManager } from "./downloadManager";
 import { createFavoritesStore, type FavoritesStore } from "./favoritesStore";
 import { estimateProfileMemory, getHardwareInfo } from "./estimate";
+import { RemoteGgufError } from "./ggufRemote";
 import { getLatestLlamaCppRelease, getRecommendedModels, HttpProxyError, listModelFiles, searchModels } from "./hf";
+import { estimateRemoteModel } from "./hfEstimate";
 import { buildCommand } from "./llama";
 import { createProfileStore, type ProfileStore } from "./profileStore";
 import { createRuntimeConfig, getModelsDir } from "./paths";
 import { RuntimeManager } from "./runtime";
 import { getSettings, saveSettings } from "./settings";
 import { normalizeProfile } from "./normalize";
-import type { BenchmarkSettings, LocalModel } from "../src/shared/types";
+import { buildSweepPlan, deriveBestSettings, rankSweep, SweepManager } from "./sweep";
+import type { BenchmarkSettings, LocalModel, SweepAxisId, SweepPlan, SweepResult } from "../src/shared/types";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -33,6 +36,7 @@ interface AppDeps {
   benchmark?: BenchmarkManager;
   downloads?: DownloadManager;
   favorites?: FavoritesStore;
+  sweep?: SweepManager;
   /**
    * Self-contained SPA HTML. When provided (standalone/compiled builds), all
    * non-API GET requests serve this instead of reading files from dist/.
@@ -119,7 +123,8 @@ async function routeApi(
   benchmarkStore: BenchmarkStore,
   benchmark: BenchmarkManager,
   downloads: DownloadManager,
-  favorites: FavoritesStore
+  favorites: FavoritesStore,
+  sweep: SweepManager
 ): Promise<void> {
   const query = new URL(request.url ?? "/", "http://127.0.0.1").searchParams;
 
@@ -169,6 +174,27 @@ async function routeApi(
     const hardware = await getHardwareInfo();
     const files = await listModelFiles(id, hardware);
     sendJson(response, 200, { id, gated: false, files, hardware });
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/models/estimate") {
+    const id = query.get("id");
+    const file = query.get("file");
+    const sizeBytes = Number(query.get("size"));
+    const contextSize = Number(query.get("context") ?? 8192);
+    if (!id || !file || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+      throw new HttpError(400, "id, file, and size are required");
+    }
+    const hardware = await getHardwareInfo();
+    try {
+      sendJson(response, 200, await estimateRemoteModel(id, file, contextSize, sizeBytes, hardware));
+    } catch (error) {
+      if (error instanceof RemoteGgufError) {
+        sendError(response, error.status, error.message);
+        return;
+      }
+      throw error;
+    }
     return;
   }
 
@@ -350,6 +376,95 @@ async function routeApi(
     return;
   }
 
+  // ---- Optimize sweep ----
+  if (request.method === "POST" && pathname === "/api/sweeps/plan") {
+    const body = await readJson<{ profileId: string; axes?: SweepAxisId[]; quick?: boolean }>(request);
+    const profiles = await store.load();
+    const profile = profiles.find((item) => item.id === body.profileId);
+    if (!profile) {
+      sendError(response, 404, "profile not found");
+      return;
+    }
+    sendJson(response, 200, await buildSweepPlan(profile, { axes: body.axes, quick: body.quick === true }));
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/sweeps/start") {
+    const body = await readJson<{ profileId: string; plan: SweepPlan }>(request);
+    const runtimeStatus = await runtime.getStatus();
+    if (runtimeStatus.state === "running" || runtimeStatus.state === "starting") {
+      sendError(response, 409, "Stop the llama-server runtime before running a sweep for cleaner, safer results.");
+      return;
+    }
+    if (benchmark.getStatus().state === "running") {
+      sendError(response, 409, "A benchmark is already running; wait for it to finish or stop it first.");
+      return;
+    }
+    if (sweep.getStatus().state === "running") {
+      sendError(response, 409, "A sweep is already running.");
+      return;
+    }
+    if (!body.plan || !Array.isArray(body.plan.stages) || !body.plan.benchSettings) {
+      sendError(response, 400, "a sweep plan (from /api/sweeps/plan) is required");
+      return;
+    }
+    const profiles = await store.load();
+    const profile = profiles.find((item) => item.id === body.profileId);
+    if (!profile) {
+      sendError(response, 404, "profile not found");
+      return;
+    }
+    sendJson(response, 200, sweep.start(profile, body.plan));
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/sweeps/status") {
+    sendJson(response, 200, sweep.getStatus());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/sweeps/stop") {
+    sendJson(response, 200, await sweep.stop());
+    return;
+  }
+
+  if (request.method === "GET" && pathname === "/api/sweeps/result") {
+    const id = query.get("id");
+    const last = sweep.getLastResult();
+    if (last && (!id || last.sweepId === id)) {
+      sendJson(response, 200, last);
+      return;
+    }
+    // Not in memory (e.g. app restarted): reconstruct the ranking from the
+    // persisted runs tagged with the requested — or most recent — sweepId.
+    const allRuns = await benchmarkStore.load();
+    const targetId = id ?? allRuns.find((run) => run.sweepId)?.sweepId ?? null;
+    if (!targetId) {
+      sendError(response, 404, "no sweep result available");
+      return;
+    }
+    const runs = allRuns.filter((run) => run.sweepId === targetId);
+    if (runs.length === 0) {
+      sendError(response, 404, "sweep not found");
+      return;
+    }
+    const ranking = rankSweep(runs);
+    const winnerRun = runs.find((run) => run.id === ranking.winnerRunId) ?? null;
+    const reconstructed: SweepResult = {
+      sweepId: targetId,
+      status: "completed",
+      profileId: runs[0].profileId,
+      profileName: runs[0].profileName,
+      ranked: ranking.ranked,
+      winnerRunId: ranking.winnerRunId,
+      baselineRunId: ranking.baselineRunId,
+      bestSettings: winnerRun ? deriveBestSettings(winnerRun) : {},
+      notes: [...ranking.notes, "Reconstructed from stored runs after a restart."]
+    };
+    sendJson(response, 200, reconstructed);
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/server/start") {
     const body = await readJson<{ profileId: string }>(request);
     const profiles = await store.load();
@@ -423,13 +538,14 @@ export function createRequestHandler(deps: AppDeps = {}) {
   const benchmark = deps.benchmark ?? new BenchmarkManager(benchmarkStore);
   const downloads = deps.downloads ?? new DownloadManager();
   const favorites = deps.favorites ?? createFavoritesStore();
+  const sweep = deps.sweep ?? new SweepManager(benchmark);
   const appHtml = deps.appHtml;
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       if (url.pathname.startsWith("/api/")) {
-        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark, downloads, favorites);
+        await routeApi(request, response, url.pathname, store, runtime, benchmarkStore, benchmark, downloads, favorites, sweep);
         return;
       }
       if (request.method !== "GET" && request.method !== "HEAD") {

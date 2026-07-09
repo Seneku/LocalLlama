@@ -5,6 +5,7 @@ import { api } from "./api";
 import { ConnectToolsModal } from "./components/ConnectToolsModal";
 import { GetStartedModal } from "./components/GetStartedModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { SweepModal } from "./components/SweepModal";
 import { ToastStack, useToasts } from "./components/Toasts";
 import { TopBar, type AppView } from "./components/TopBar";
 import { BenchmarksView } from "./views/BenchmarksView";
@@ -83,6 +84,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [getStartedTab, setGetStartedTab] = useState<"llama" | "models" | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [sweepOpen, setSweepOpen] = useState(false);
   const { toasts, notify, dismiss } = useToasts();
 
   const selectedProfile = useMemo(
@@ -328,6 +330,28 @@ export default function App() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
+  function applyProfileSettings(settings: Partial<LlamaProfile>) {
+    setDraft((current) => (current ? { ...current, ...settings } : current));
+  }
+
+  // The sweep runs against the saved profile, so persist the draft first.
+  async function openOptimize() {
+    if (!draft) {
+      return;
+    }
+    if (running) {
+      notify("Stop the llama-server runtime before optimizing for cleaner, safer results.", "error");
+      return;
+    }
+    if (isDirty || !draft.id) {
+      const saved = await saveDraft();
+      if (!saved) {
+        return;
+      }
+    }
+    setSweepOpen(true);
+  }
+
   function useDownloadedModel(path: string) {
     setGetStartedTab(null);
     if (draft) {
@@ -395,6 +419,14 @@ export default function App() {
         onSetAlias={(alias) => updateDraft("modelAlias", alias)}
         notify={notify}
       />
+      <SweepModal
+        open={sweepOpen}
+        profileId={draft?.id || null}
+        profileName={draft?.name ?? null}
+        onClose={() => setSweepOpen(false)}
+        onStarted={() => setView("benchmarks")}
+        notify={notify}
+      />
 
       {config && !config.detected.cudaServer && !config.detected.cpuServer ? (
         <div className="onboarding">
@@ -438,6 +470,7 @@ export default function App() {
             deleteSelected={deleteSelected}
             startSelected={startSelected}
             stopServer={stopServer}
+            onOptimize={() => void openOptimize()}
             restartServer={restartServer}
             onOpenConnect={() => setConnectOpen(true)}
             notify={notify}
@@ -454,6 +487,8 @@ export default function App() {
             runtimeRunning={running}
             busy={busy}
             saveDraft={saveDraft}
+            onOptimize={() => void openOptimize()}
+            onApplySettings={applyProfileSettings}
             onMessage={notify}
           />
         </div>

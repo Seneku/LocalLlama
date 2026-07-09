@@ -147,6 +147,31 @@ export interface ModelFilesResponse {
   hardware: HardwareInfo;
 }
 
+/**
+ * Pre-download fit computed by streaming just the GGUF header from Hugging
+ * Face (HTTP Range) through the calibrated estimator — the same math that
+ * runs on local files, so the fit accounts for context size, KV cache, and
+ * MoE expert offload.
+ */
+export interface RemoteModelEstimate {
+  id: string;
+  filename: string;
+  contextSize: number;
+  confidence: EstimateConfidence;
+  /** Fit and VRAM at full GPU offload. */
+  fit: EstimateFit;
+  estimatedVramMiB: number;
+  estimatedSystemRamMiB: number;
+  /** Best partial offload when full offload does not fit free VRAM. */
+  recommendation: VramRecommendation | null;
+  /** Alternative with MoE expert weights on the CPU (--cpu-moe); null for dense models. */
+  cpuMoe: { fit: EstimateFit; estimatedVramMiB: number; estimatedSystemRamMiB: number } | null;
+  maxGpuLayers: number | null;
+  /** True for multi-part GGUFs — sizes are summed across shards and the estimate uses metadata heuristics. */
+  split: boolean;
+  warnings: string[];
+}
+
 export type DownloadState = "idle" | "downloading" | "completed" | "failed" | "cancelled";
 
 export interface DownloadStatus {
@@ -293,6 +318,10 @@ export interface BenchmarkRun {
   metrics: BenchmarkMetrics;
   /** Optional: absent on runs stored before enrichment; backfilled on load. */
   env?: BenchmarkEnv | null;
+  /** Set when the run was executed as part of an Optimize sweep. */
+  sweepId?: string | null;
+  /** Human label of the sweep candidate, e.g. "gpu layers 28" or "baseline". */
+  sweepLabel?: string | null;
   stdout: string;
   stderr: string;
   error: string | null;
@@ -305,6 +334,76 @@ export interface BenchmarkStatus {
   profileName: string | null;
   startedAt: string | null;
   command: BenchmarkCommandPreview | null;
+}
+
+// ---- Optimize sweep ----
+
+export type SweepAxisId = "gpuLayers" | "flashAttention" | "ubatchSize" | "batchSize" | "kvCache" | "threads";
+
+/**
+ * One benchmark configuration in a sweep stage. Overrides are relative to the
+ * best configuration found in earlier stages (stage-wise greedy search, never
+ * a full cartesian grid).
+ */
+export interface SweepCandidate {
+  axis: SweepAxisId | "baseline";
+  label: string;
+  settings: Partial<BenchmarkSettings>;
+  profileOverrides: Partial<LlamaProfile>;
+  /** Set when the estimator pre-pruned this candidate (e.g. VRAM would not fit); pruned candidates are never run. */
+  prunedReason: string | null;
+}
+
+export interface SweepStage {
+  axis: SweepAxisId | "baseline";
+  title: string;
+  candidates: SweepCandidate[];
+}
+
+export interface SweepPlan {
+  profileId: string;
+  profileName: string;
+  stages: SweepStage[];
+  benchSettings: BenchmarkSettings;
+  /** blockCount + 1 when known; used to treat e.g. gpuLayers 999 and full offload as the same config. */
+  maxGpuLayers: number | null;
+  /** Executable candidates (pruned ones excluded). Actual runs may be fewer: duplicate configs are skipped. */
+  estimatedRuns: number;
+  notes: string[];
+}
+
+export interface SweepStatus {
+  state: "idle" | "running";
+  sweepId: string | null;
+  profileId: string | null;
+  profileName: string | null;
+  completedRuns: number;
+  totalRuns: number;
+  currentCandidate: string | null;
+  startedAt: string | null;
+}
+
+export interface SweepRanked {
+  runId: string;
+  label: string;
+  score: number | null;
+  /** Absolute one-sigma uncertainty of the score, propagated from pp/tg repetition stddev. */
+  scoreStddev: number | null;
+  /** True when the score gap to the winner is within combined noise — statistically tied. */
+  withinNoiseOfBest: boolean;
+}
+
+export interface SweepResult {
+  sweepId: string;
+  status: "completed" | "cancelled" | "failed";
+  profileId: string;
+  profileName: string;
+  ranked: SweepRanked[];
+  winnerRunId: string | null;
+  baselineRunId: string | null;
+  /** Winner's tuned fields, ready to merge into the profile and save. */
+  bestSettings: Partial<LlamaProfile>;
+  notes: string[];
 }
 
 export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "unknown";
