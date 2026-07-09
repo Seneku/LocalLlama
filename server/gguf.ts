@@ -443,6 +443,40 @@ async function readWindow(file: FileHandle, size: number): Promise<Buffer> {
   return buffer;
 }
 
+/**
+ * Anything that can serve the leading bytes of a GGUF file — a local file
+ * handle or an HTTP-Range remote (see ggufRemote.ts). Reads are always a
+ * prefix from offset 0; the grow loop widens the prefix when the header
+ * overflows it.
+ */
+export interface GgufByteSource {
+  /** Total size of the (logical) file in bytes. */
+  size: number;
+  readPrefix(byteLength: number): Promise<Buffer>;
+}
+
+export async function readGgufInfoFromSource(source: GgufByteSource): Promise<GgufModelInfo> {
+  // Read an initial small window and grow it (doubling, up to the 64 MiB
+  // cap) only if the header genuinely overflows the current window.
+  let windowSize = Math.min(INITIAL_READ_BYTES, source.size);
+  let buffer = await source.readPrefix(windowSize);
+
+  for (;;) {
+    try {
+      return parseFile(buffer, source.size);
+    } catch (error) {
+      if (!(error instanceof WindowOverflowError)) {
+        throw error;
+      }
+      if (windowSize >= source.size || windowSize >= MAX_READ_BYTES) {
+        throw new Error("GGUF metadata exceeds the inspected header window");
+      }
+      windowSize = Math.min(Math.max(windowSize * 2, error.required), MAX_READ_BYTES, source.size);
+      buffer = await source.readPrefix(windowSize);
+    }
+  }
+}
+
 export async function readGgufModelInfo(modelPath: string): Promise<GgufModelInfo> {
   const fileStat = await stat(modelPath);
   const cached = metadataCache.get(modelPath);
@@ -452,31 +486,16 @@ export async function readGgufModelInfo(modelPath: string): Promise<GgufModelInf
 
   const file = await open(modelPath, "r");
   try {
-    // Read an initial small window and grow it (doubling, up to the 64 MiB
-    // cap) only if the header genuinely overflows the current window.
-    let windowSize = Math.min(INITIAL_READ_BYTES, fileStat.size);
-    let buffer = await readWindow(file, windowSize);
-
-    for (;;) {
-      try {
-        const info = parseFile(buffer, fileStat.size);
-        metadataCache.set(modelPath, {
-          mtimeMs: fileStat.mtimeMs,
-          size: fileStat.size,
-          info
-        });
-        return info;
-      } catch (error) {
-        if (!(error instanceof WindowOverflowError)) {
-          throw error;
-        }
-        if (windowSize >= fileStat.size || windowSize >= MAX_READ_BYTES) {
-          throw new Error("GGUF metadata exceeds the inspected header window");
-        }
-        windowSize = Math.min(Math.max(windowSize * 2, error.required), MAX_READ_BYTES, fileStat.size);
-        buffer = await readWindow(file, windowSize);
-      }
-    }
+    const info = await readGgufInfoFromSource({
+      size: fileStat.size,
+      readPrefix: (byteLength) => readWindow(file, byteLength)
+    });
+    metadataCache.set(modelPath, {
+      mtimeMs: fileStat.mtimeMs,
+      size: fileStat.size,
+      info
+    });
+    return info;
   } finally {
     await file.close();
   }

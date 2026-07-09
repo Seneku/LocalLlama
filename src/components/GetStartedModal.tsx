@@ -25,6 +25,7 @@ import type {
   LocalModel,
   ModelFile,
   ModelSearchResult,
+  RemoteModelEstimate,
   RuntimeConfig
 } from "../shared/types";
 import type { Notify } from "./Toasts";
@@ -46,6 +47,44 @@ function formatGb(bytes: number | null | undefined): string {
     return "-";
   }
   return `${(bytes / 1024 / 1024 / 1024).toLocaleString(undefined, { maximumFractionDigits: 2 })} GB`;
+}
+
+const CONTEXT_CHOICES = [4096, 8192, 16384, 32768] as const;
+
+/**
+ * Turn an accurate remote estimate into pill text. Full offload first; when
+ * that is over budget, a partial-offload or --cpu-moe configuration can still
+ * make the model usable, so say so instead of a blunt "too big".
+ */
+function describeEstimate(est: RemoteModelEstimate): { cls: EstimateFit; label: string; title: string } {
+  const gb = (mib: number) => `${(mib / 1024).toFixed(1)} GB`;
+  const ctx = `${Math.round(est.contextSize / 1024)}k context`;
+  if (est.fit === "fits" || est.fit === "tight") {
+    return {
+      cls: est.fit,
+      label: est.fit === "fits" ? "Fits" : "Tight",
+      title: `Full offload: ~${gb(est.estimatedVramMiB)} VRAM at ${ctx} (${est.confidence} confidence).`
+    };
+  }
+  if (est.cpuMoe && est.cpuMoe.fit !== "over") {
+    return {
+      cls: "tight",
+      label: "Fits · CPU experts",
+      title: `MoE model: with --cpu-moe it needs ~${gb(est.cpuMoe.estimatedVramMiB)} VRAM + ~${gb(est.cpuMoe.estimatedSystemRamMiB)} RAM at ${ctx}.`
+    };
+  }
+  if (est.recommendation && est.recommendation.gpuLayers > 0) {
+    return {
+      cls: "tight",
+      label: `Fits · ${est.recommendation.gpuLayers}${est.maxGpuLayers ? `/${est.maxGpuLayers}` : ""} layers`,
+      title: `Partial offload: ${est.recommendation.gpuLayers} GPU layers ≈ ${gb(est.recommendation.estimatedVramMiB)} VRAM at ${ctx}; the rest runs from ~${gb(est.estimatedSystemRamMiB)} system RAM (slower).`
+    };
+  }
+  return {
+    cls: "over",
+    label: "Too big",
+    title: `Needs ~${gb(est.estimatedVramMiB)} VRAM at ${ctx} even at full offload.`
+  };
 }
 
 function fitLabel(fit: EstimateFit): string {
@@ -250,6 +289,39 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   const [recommended, setRecommended] = useState<ModelSearchResult[]>([]);
   const [maxParamsB, setMaxParamsB] = useState<number | null>(null);
   const [view, setView] = useState<"recommended" | "search" | "favorites">("recommended");
+  const [context, setContext] = useState<number>(8192);
+  const [estimates, setEstimates] = useState<Record<string, RemoteModelEstimate | "loading" | "error">>({});
+  const estimateInFlight = useRef(new Set<string>());
+
+  const fetchEstimate = useCallback(
+    (modelId: string, file: ModelFile, ctx: number) => {
+      const key = `${modelId}/${file.filename}@${ctx}`;
+      if (estimateInFlight.current.has(key)) {
+        return;
+      }
+      estimateInFlight.current.add(key);
+      setEstimates((prev) => (prev[file.filename] ? prev : { ...prev, [file.filename]: "loading" }));
+      api
+        .remoteEstimate(modelId, file.filename, ctx, file.sizeBytes)
+        .then((estimate) => setEstimates((prev) => ({ ...prev, [file.filename]: estimate })))
+        .catch(() => setEstimates((prev) => ({ ...prev, [file.filename]: "error" })))
+        .finally(() => estimateInFlight.current.delete(key));
+    },
+    []
+  );
+
+  // Upgrade the coarse size-only pills to real estimator verdicts for the
+  // plausible download candidates (coarse fits/tight, capped at 6 — the
+  // server additionally limits ranged reads to 2 in flight).
+  const prefetchEstimates = useCallback(
+    (modelId: string, fileList: ModelFile[], ctx: number) => {
+      fileList
+        .filter((file) => file.fit === "fits" || file.fit === "tight")
+        .slice(0, 6)
+        .forEach((file) => fetchEstimate(modelId, file, ctx));
+    },
+    [fetchEstimate]
+  );
 
   const runSearch = useCallback(
     async (term: string) => {
@@ -320,15 +392,27 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   async function selectModel(model: ModelSearchResult) {
     setSelected(model);
     setFiles([]);
+    setEstimates({});
     setFilesLoading(true);
     try {
       const response = await api.modelFiles(model.id);
       setFiles(response.files);
       setHardware(response.hardware);
+      prefetchEstimates(model.id, response.files, context);
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), "error");
     } finally {
       setFilesLoading(false);
+    }
+  }
+
+  function changeContext(ctx: number) {
+    setContext(ctx);
+    setEstimates({});
+    if (selected) {
+      // Header bytes are cached server-side, so re-estimating at a new
+      // context is metadata math, not another download.
+      prefetchEstimates(selected.id, files, ctx);
     }
   }
 
@@ -390,9 +474,10 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
         <div className="hw-line">
           <HardDrive size={14} />
           <span>
-            {gpu.name} — {formatGb((gpu.totalMiB ?? 0) * 1024 * 1024)} VRAM (
-            {formatGb((gpu.freeMiB ?? 0) * 1024 * 1024)} free now). Fit badges compare model size against your card's
-            total VRAM; the exact per-run estimate appears once a model is downloaded and used in a profile.
+            {gpu.name} — {formatGb((gpu.totalMiB ?? 0) * 1024 * 1024)} VRAM
+            {gpu.freeMiB !== null ? <> ({formatGb(gpu.freeMiB * 1024 * 1024)} free now)</> : null}. Pills marked ~ are
+            size-only guesses; selecting a model reads its header from Hugging Face and upgrades them to exact
+            estimates at your chosen context size.
           </span>
         </div>
       ) : null}
@@ -472,6 +557,20 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
               </a>
             </div>
           ) : null}
+          {selected && files.length > 0 ? (
+            <div className="context-chips" title="Fit estimates account for the KV cache at this context size">
+              <span>Fit at</span>
+              {CONTEXT_CHOICES.map((ctx) => (
+                <button
+                  key={ctx}
+                  className={`chip ${context === ctx ? "active" : ""}`}
+                  onClick={() => changeContext(ctx)}
+                >
+                  {ctx / 1024}k
+                </button>
+              ))}
+            </div>
+          ) : null}
           {!selected ? (
             <div className="empty">Select a model to see its GGUF files.</div>
           ) : filesLoading ? (
@@ -485,14 +584,33 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
                 download && download.totalBytes
                   ? Math.min(100, Math.round((download.receivedBytes / download.totalBytes) * 100))
                   : 0;
+              const estimate = estimates[file.filename];
+              const accurate = estimate && estimate !== "loading" && estimate !== "error" ? describeEstimate(estimate) : null;
+              const fitClass = accurate ? accurate.cls : file.fit;
               return (
-                <div key={file.filename} className={`file-row ${file.fit}`} title={file.filename}>
+                <div key={file.filename} className={`file-row ${fitClass}`} title={file.filename}>
                   <div className="file-head">
                     <span className="file-name">
                       {file.quant ? <em className="quant-tag">{file.quant}</em> : null}
                       <span className="fname-text">{file.filename}</span>
                     </span>
-                    <span className={`fit-pill ${file.fit}`}>{fitLabel(file.fit)}</span>
+                    {accurate ? (
+                      <span className={`fit-pill ${accurate.cls}`} title={accurate.title}>
+                        {accurate.label}
+                      </span>
+                    ) : estimate === "loading" ? (
+                      <span className={`fit-pill ${file.fit}`} title="Reading the model header from Hugging Face…">
+                        checking…
+                      </span>
+                    ) : (
+                      <button
+                        className={`fit-pill ${file.fit} approx`}
+                        title="Approximate (file size only). Click to read the model header and compute an exact estimate at the selected context."
+                        onClick={() => fetchEstimate(selected.id, file, context)}
+                      >
+                        ~{fitLabel(file.fit)}
+                      </button>
+                    )}
                   </div>
                   <div className="file-meta">
                     <span>{formatGb(file.sizeBytes)}</span>
