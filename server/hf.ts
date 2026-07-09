@@ -2,6 +2,7 @@
 // file listing / downloads). Kept server-side to avoid browser CORS, to attach
 // the optional HF token, and to cache the release lookup. Pure normalizers are
 // exported separately so they can be unit-tested against captured fixtures.
+import { annotateRecommendedQuant, classifyUseCase, dedupeMirrors, parseModelParams } from "./modelGuidance";
 import { getSettings } from "./settings";
 import type {
   EstimateFit,
@@ -10,7 +11,8 @@ import type {
   LlamaCppAssetKind,
   LlamaCppRelease,
   ModelFile,
-  ModelSearchResult
+  ModelSearchResult,
+  UseCase
 } from "../src/shared/types";
 
 const GITHUB_LATEST = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest";
@@ -161,13 +163,10 @@ export function resolveDownloadUrl(id: string, filename: string): string {
   return `${HF_HOST}/${id}/resolve/main/${filename}`;
 }
 
-// Largest number-of-billions token in the id (e.g. "Qwen3-30B-A3B" -> 30,
-// "Llama-3.1-8B" -> 8, "gemma-4-12b-it" -> 12). Returns null if none found.
+// Total number-of-billions parsed from the id (e.g. "Qwen3-30B-A3B" -> 30,
+// "Llama-3.1-8B" -> 8). Kept as a thin wrapper over the MoE-aware parser.
 export function parseParamsB(id: string): number | null {
-  const matches = [...id.matchAll(/(\d+(?:\.\d+)?)\s*b\b/giu)]
-    .map((match) => Number(match[1]))
-    .filter((value) => Number.isFinite(value) && value > 0 && value < 2000);
-  return matches.length ? Math.max(...matches) : null;
+  return parseModelParams(id).totalB;
 }
 
 // Roughly the biggest model (in billions of params) that fits at a common
@@ -182,26 +181,52 @@ export function recommendedMaxParamsB(hardware: HardwareInfo): number {
   return Math.max(1, Math.round(usableGiB / GIB_PER_B_Q4));
 }
 
-function isRecommendable(model: ModelSearchResult, maxParamsB: number): boolean {
-  // Skip embedding / non-chat repos.
-  if (model.pipelineTag && model.pipelineTag !== "text-generation") {
+export function isRecommendable(model: ModelSearchResult, maxParamsB: number, hardware: HardwareInfo): boolean {
+  // Skip embedding / rerank repos; multimodal chat models stay. Some embed
+  // repos ship without a pipeline tag, so also screen the id.
+  if (model.pipelineTag && model.pipelineTag !== "text-generation" && model.pipelineTag !== "image-text-to-text") {
     return false;
   }
-  const params = parseParamsB(model.id);
-  return params === null || params <= maxParamsB;
+  if (/embed|rerank|retrieval/iu.test(model.id)) {
+    return false;
+  }
+  const params = parseModelParams(model.id);
+  if (params.totalB === null) {
+    return true;
+  }
+  if (params.activeB !== null) {
+    // MoE: compute is bounded by ACTIVE params, and --cpu-moe keeps the
+    // expert weights in system RAM — so it is viable when the active share
+    // fits the GPU budget and the total Q4 weights fit combined RAM + VRAM.
+    const gpu = hardware.gpus[0] ?? null;
+    const combinedGiB = hardware.totalRamMiB / 1024 + (gpu?.totalMiB ?? 0) / 1024 - 4;
+    return params.activeB <= maxParamsB && params.totalB * GIB_PER_B_Q4 <= combinedGiB;
+  }
+  return params.totalB <= maxParamsB;
 }
 
 export interface RecommendedResult {
   models: ModelSearchResult[];
   maxParamsB: number;
+  groups: Array<{ useCase: UseCase; models: ModelSearchResult[] }>;
 }
+
+const USE_CASE_ORDER: UseCase[] = ["chat", "coding", "reasoning", "vision"];
 
 export async function getRecommendedModels(hardware: HardwareInfo): Promise<RecommendedResult> {
   const maxParamsB = recommendedMaxParamsB(hardware);
-  // Most popular first; fetch extra so the size filter still leaves a full page.
-  const raw = await searchModels("", "downloads", 80);
-  const models = raw.filter((model) => isRecommendable(model, maxParamsB)).slice(0, 30);
-  return { models, maxParamsB };
+  // Most popular first; fetch extra so size-filtering + mirror-dedup still
+  // leave every use-case group with something to show.
+  const raw = await searchModels("", "downloads", 150);
+  const eligible = raw.filter((model) => isRecommendable(model, maxParamsB, hardware));
+  const models = dedupeMirrors(eligible)
+    .map((model) => ({ ...model, useCase: classifyUseCase(model.id, model.pipelineTag) }))
+    .slice(0, 40);
+  const groups = USE_CASE_ORDER.map((useCase) => ({
+    useCase,
+    models: models.filter((model) => model.useCase === useCase)
+  })).filter((group) => group.models.length > 0);
+  return { models, maxParamsB, groups };
 }
 
 // ---- network ----
@@ -250,7 +275,7 @@ export async function listModelFiles(id: string, hardware: HardwareInfo): Promis
   if (!response.ok) {
     throw new HttpProxyError(response.status, `Hugging Face file listing returned ${response.status}`);
   }
-  return normalizeTree(await response.json(), hardware);
+  return annotateRecommendedQuant(normalizeTree(await response.json(), hardware));
 }
 
 /** Test hook: clear the cached llama.cpp release. */

@@ -111,6 +111,8 @@ export interface LlamaCppRelease {
 
 // ---- model discovery + download ----
 
+export type UseCase = "chat" | "coding" | "vision" | "reasoning";
+
 export interface ModelSearchResult {
   id: string;
   author: string;
@@ -119,6 +121,10 @@ export interface ModelSearchResult {
   gated: boolean;
   pipelineTag: string | null;
   updatedAt: string | null;
+  /** Set on recommended results: keyword-classified primary use case. */
+  useCase?: UseCase;
+  /** Set on recommended results: how many other uploads of the same base model were collapsed into this one. */
+  mirrorCount?: number;
 }
 
 export interface FavoriteModel extends ModelSearchResult {
@@ -130,6 +136,8 @@ export interface RecommendedResponse {
   hardware: HardwareInfo;
   /** Largest model (billions of params) expected to fit at a Q4 quant. */
   maxParamsB: number;
+  /** Same models grouped by classified use case (chat/coding/vision/reasoning). */
+  groups?: Array<{ useCase: UseCase; models: ModelSearchResult[] }>;
 }
 
 export interface ModelFile {
@@ -138,6 +146,9 @@ export interface ModelFile {
   sizeMiB: number;
   quant: string | null;
   fit: EstimateFit;
+  /** True for the quant the quality ladder recommends for this hardware. */
+  recommended?: boolean;
+  recommendReason?: string;
 }
 
 export interface ModelFilesResponse {

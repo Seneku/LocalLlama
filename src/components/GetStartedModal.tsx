@@ -26,7 +26,8 @@ import type {
   ModelFile,
   ModelSearchResult,
   RemoteModelEstimate,
-  RuntimeConfig
+  RuntimeConfig,
+  UseCase
 } from "../shared/types";
 import type { Notify } from "./Toasts";
 import { ConfirmButton } from "./ui";
@@ -289,6 +290,7 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   const [recommended, setRecommended] = useState<ModelSearchResult[]>([]);
   const [maxParamsB, setMaxParamsB] = useState<number | null>(null);
   const [view, setView] = useState<"recommended" | "search" | "favorites">("recommended");
+  const [useCaseFilter, setUseCaseFilter] = useState<UseCase | "all">("all");
   const [context, setContext] = useState<number>(8192);
   const [estimates, setEstimates] = useState<Record<string, RemoteModelEstimate | "loading" | "error">>({});
   const estimateInFlight = useRef(new Set<string>());
@@ -446,7 +448,13 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
   }
 
   const gpu = hardware?.gpus[0];
-  const listModels = view === "recommended" ? recommended : view === "favorites" ? favorites : results;
+  const listModels =
+    view === "recommended"
+      ? recommended.filter((model) => useCaseFilter === "all" || model.useCase === useCaseFilter)
+      : view === "favorites"
+        ? favorites
+        : results;
+  const useCases = [...new Set(recommended.map((model) => model.useCase).filter(Boolean))] as UseCase[];
 
   return (
     <div className="model-browser">
@@ -497,10 +505,30 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
       </div>
 
       {view === "recommended" ? (
-        <div className="recommend-note">
-          Popular GGUF chat models that should fit your {gpu ? gpu.name : "hardware"}
-          {maxParamsB ? <> — up to ~{maxParamsB}B params at a Q4 quant</> : null}. Sorted by downloads.
-        </div>
+        <>
+          <div className="recommend-note">
+            Popular GGUF models that should fit your {gpu ? gpu.name : "hardware"}
+            {maxParamsB ? <> — up to ~{maxParamsB}B active params at a Q4 quant</> : null}. Mirrors of the same base
+            model are collapsed; sorted by downloads.
+          </div>
+          {useCases.length > 1 ? (
+            <div className="log-toolbar usecase-chips">
+              <button className={`chip ${useCaseFilter === "all" ? "active" : ""}`} onClick={() => setUseCaseFilter("all")}>
+                All
+              </button>
+              {useCases.map((useCase) => (
+                <button
+                  key={useCase}
+                  className={`chip ${useCaseFilter === useCase ? "active" : ""}`}
+                  onClick={() => setUseCaseFilter(useCase)}
+                >
+                  {useCase}
+                  <small>{recommended.filter((model) => model.useCase === useCase).length}</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       <div className="model-columns">
@@ -526,6 +554,7 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
                   <small>
                     ↓ {model.downloads.toLocaleString()} · ♥ {model.likes.toLocaleString()}
                     {model.pipelineTag ? ` · ${model.pipelineTag}` : ""}
+                    {model.mirrorCount ? ` · +${model.mirrorCount} other uploader${model.mirrorCount > 1 ? "s" : ""}` : ""}
                   </small>
                 </button>
                 <button
@@ -591,7 +620,15 @@ function ModelBrowser({ onUseModel, notify }: { onUseModel(path: string): void; 
                 <div key={file.filename} className={`file-row ${fitClass}`} title={file.filename}>
                   <div className="file-head">
                     <span className="file-name">
-                      {file.quant ? <em className="quant-tag">{file.quant}</em> : null}
+                      {file.quant ? (
+                        <em
+                          className={`quant-tag ${file.recommended ? "recommended" : ""}`}
+                          title={file.recommendReason ?? undefined}
+                        >
+                          {file.recommended ? "★ " : ""}
+                          {file.quant}
+                        </em>
+                      ) : null}
                       <span className="fname-text">{file.filename}</span>
                     </span>
                     {accurate ? (

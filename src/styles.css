@@ -2902,3 +2902,15 @@ button.fit-pill {
 .fit-pill.approx:hover:not(:disabled) {
   opacity: 1;
 }
+
+/* ---------- Model guidance (quant star + use-case chips) ---------- */
+
+.usecase-chips {
+  padding: 2px 0 6px;
+  text-transform: capitalize;
+}
+
+.quant-tag.recommended {
+  border-color: var(--amber-border);
+  color: var(--amber);
+}

@@ -161,8 +161,8 @@ async function routeApi(
 
   if (request.method === "GET" && pathname === "/api/models/recommended") {
     const hardware = await getHardwareInfo();
-    const { models, maxParamsB } = await getRecommendedModels(hardware);
-    sendJson(response, 200, { models, hardware, maxParamsB });
+    const { models, maxParamsB, groups } = await getRecommendedModels(hardware);
+    sendJson(response, 200, { models, hardware, maxParamsB, groups });
     return;
   }
 
