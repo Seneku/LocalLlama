@@ -304,10 +304,14 @@ export interface BenchmarkStatus {
   command: BenchmarkCommandPreview | null;
 }
 
+export type GpuVendor = "nvidia" | "amd" | "intel" | "apple" | "unknown";
+
 export interface GpuInfo {
   name: string;
+  vendor: GpuVendor;
   totalMiB: number | null;
   usedMiB: number | null;
+  /** Live free VRAM. Only nvidia-smi/rocm-smi/sysfs paths report it; Windows AMD/Intel registry detection leaves it null. */
   freeMiB: number | null;
 }
 

@@ -11,6 +11,7 @@ const hardware: HardwareInfo = {
   gpus: [
     {
       name: "NVIDIA GeForce RTX 4070 SUPER",
+      vendor: "nvidia",
       totalMiB: 12281,
       usedMiB: 1600,
       freeMiB: 10681
@@ -183,7 +184,7 @@ describe("memory estimates", () => {
     const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 12288, parallelSlots: 1 });
     const tightHardware: HardwareInfo = {
       ...hardware,
-      gpus: [{ name: "RTX 4070 SUPER", totalMiB: 12281, usedMiB: 4600, freeMiB: 7681 }]
+      gpus: [{ name: "RTX 4070 SUPER", vendor: "nvidia", totalMiB: 12281, usedMiB: 4600, freeMiB: 7681 }]
     };
     const estimate = await estimateProfileMemory(profile, {
       hardware: tightHardware,
@@ -200,6 +201,26 @@ describe("memory estimates", () => {
     // The recommended setting must itself fit the free VRAM.
     expect(estimate.recommendation!.estimatedVramMiB).toBeLessThanOrEqual(7681 - 128);
     expect(estimate.recommendation!.vramHeadroomMiB).toBeGreaterThanOrEqual(0);
+  });
+
+  test("recommends gpu layers from total VRAM when free VRAM is unknown (registry-detected GPUs)", async () => {
+    const profile = makeProfile({ backendMode: "cuda", gpuLayers: 999, contextSize: 12288, parallelSlots: 1 });
+    const amdHardware: HardwareInfo = {
+      ...hardware,
+      gpus: [{ name: "AMD Radeon RX 7600", vendor: "amd", totalMiB: 8192, usedMiB: null, freeMiB: null }]
+    };
+    const estimate = await estimateProfileMemory(profile, {
+      hardware: amdHardware,
+      metadata: gemmaMetadata,
+      layout: gemmaLayout(),
+      fileExists: () => true
+    });
+
+    expect(estimate.recommendation).not.toBeNull();
+    expect(estimate.recommendation!.gpuLayers).toBeGreaterThan(0);
+    // Budget = total - 1536 reserve; the recommended config must fit it.
+    expect(estimate.recommendation!.estimatedVramMiB).toBeLessThanOrEqual(8192 - 1536 - 128);
+    expect(estimate.assumptions.some((item) => item.includes("Free VRAM is not reported"))).toBe(true);
   });
 
   test("recommends offloading more when there is headroom", async () => {

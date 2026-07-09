@@ -17,7 +17,10 @@ function hardware(freeMiB: number | null, totalMiB = 12281): HardwareInfo {
   return {
     totalRamMiB: 65536,
     freeRamMiB: 48000,
-    gpus: freeMiB === null ? [] : [{ name: "RTX 4070 SUPER", totalMiB, usedMiB: totalMiB - freeMiB, freeMiB }]
+    gpus:
+      freeMiB === null
+        ? []
+        : [{ name: "RTX 4070 SUPER", vendor: "nvidia" as const, totalMiB, usedMiB: totalMiB - freeMiB, freeMiB }]
   };
 }
 
