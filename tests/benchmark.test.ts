@@ -56,6 +56,33 @@ describe("benchmark command generation", () => {
     expect(preview.args).not.toContain("-ngl");
     expect(preview.warnings).toContain("GPU layers are ignored when the CPU benchmark backend is selected.");
   });
+
+  test("seeds batch/ubatch/flash-attention from the profile when not overridden", () => {
+    const profile = {
+      ...exampleProfiles[0],
+      batchSize: 1024,
+      ubatchSize: 256,
+      flashAttention: "on" as const
+    };
+    const fromProfile = buildBenchmarkCommand(profile, undefined, {
+      paths,
+      defaultThreads: 8,
+      fileExists: exists
+    }).args.join(" ");
+    expect(fromProfile).toContain("-b 1024");
+    expect(fromProfile).toContain("-ub 256");
+    expect(fromProfile).toContain("-fa on");
+
+    // Explicit benchmark settings still win over the profile.
+    const overridden = buildBenchmarkCommand(profile, { batchSize: 512, flashAttention: "off" }, {
+      paths,
+      defaultThreads: 8,
+      fileExists: exists
+    }).args.join(" ");
+    expect(overridden).toContain("-b 512");
+    expect(overridden).toContain("-ub 256"); // still from the profile
+    expect(overridden).toContain("-fa off");
+  });
 });
 
 describe("benchmark parsing", () => {

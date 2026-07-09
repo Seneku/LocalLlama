@@ -83,15 +83,20 @@ function resolveBackend(
   return isAppleSilicon() ? "Metal" : "CPU";
 }
 
-function normalizedSettings(settings?: Partial<BenchmarkSettings>): BenchmarkSettings {
+// Explicit overrides win, then profile-pinned values (a saved optimized
+// profile benchmarks as it would launch), then the benchmark defaults.
+function normalizedSettings(profile: LlamaProfile, settings?: Partial<BenchmarkSettings>): BenchmarkSettings {
+  const profileBatch = profile.batchSize > 0 ? profile.batchSize : null;
+  const profileUbatch = profile.ubatchSize > 0 ? profile.ubatchSize : null;
+  const profileFlash = profile.flashAttention !== "auto" ? profile.flashAttention : null;
   return {
     promptTokens: positiveInteger(settings?.promptTokens ?? defaultBenchmarkSettings.promptTokens, 512),
     generationTokens: positiveInteger(settings?.generationTokens ?? defaultBenchmarkSettings.generationTokens, 128),
     repetitions: positiveInteger(settings?.repetitions ?? defaultBenchmarkSettings.repetitions, 3),
-    batchSize: positiveInteger(settings?.batchSize ?? defaultBenchmarkSettings.batchSize, 2048),
-    ubatchSize: positiveInteger(settings?.ubatchSize ?? defaultBenchmarkSettings.ubatchSize, 512),
+    batchSize: positiveInteger(settings?.batchSize ?? profileBatch ?? defaultBenchmarkSettings.batchSize, 2048),
+    ubatchSize: positiveInteger(settings?.ubatchSize ?? profileUbatch ?? defaultBenchmarkSettings.ubatchSize, 512),
     noWarmup: Boolean(settings?.noWarmup ?? defaultBenchmarkSettings.noWarmup),
-    flashAttention: settings?.flashAttention ?? defaultBenchmarkSettings.flashAttention
+    flashAttention: settings?.flashAttention ?? profileFlash ?? defaultBenchmarkSettings.flashAttention
   };
 }
 
@@ -105,7 +110,7 @@ export function buildBenchmarkCommand(
   const fileExists = options.fileExists ?? fs.existsSync;
   const backend = resolveBackend(profile.backendMode, paths, fileExists);
   const executable = backend === "CUDA" ? paths.cudaBenchPath : paths.cpuBenchPath;
-  const benchSettings = normalizedSettings(settings);
+  const benchSettings = normalizedSettings(profile, settings);
   const threads =
     profile.threadsMode === "manual" ? positiveInteger(profile.threads, defaultThreads) : defaultThreads;
   const warnings: string[] = [];
@@ -316,7 +321,7 @@ export class BenchmarkManager {
       throw new Error(`A benchmark is already running for ${this.activeRun?.profileName ?? "another profile"}.`);
     }
 
-    const normalized = normalizedSettings(settings);
+    const normalized = normalizedSettings(profile, settings);
     const validation = validateBenchmarkLaunch(profile, normalized);
     if (validation.errors.length > 0) {
       throw new Error(validation.errors.join("\n"));

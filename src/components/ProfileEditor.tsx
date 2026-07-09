@@ -2,7 +2,15 @@ import { Copy, Cpu, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { api } from "../api";
-import type { BackendMode, KvCacheType, LlamaProfile, ReasoningMode, SpecType, ThreadsMode } from "../shared/types";
+import type {
+  BackendMode,
+  FlashAttentionMode,
+  KvCacheType,
+  LlamaProfile,
+  ReasoningMode,
+  SpecType,
+  ThreadsMode
+} from "../shared/types";
 import type { Notify } from "./Toasts";
 import { ConfirmButton, NumberField, SelectField, TextField, ToggleField } from "./ui";
 
@@ -238,6 +246,29 @@ export function ProfileEditor({
           max={64}
           help="Concurrent request slots. Splits the context into N and reserves buffers for N streams — use 1 for a single user; more just wastes VRAM."
           onChange={(value) => updateDraft("parallelSlots", value)}
+        />
+        <NumberField
+          label="Batch size"
+          value={draft.batchSize}
+          min={0}
+          max={16384}
+          help="Logical batch size (-b): max tokens queued per iteration. 0 = llama.cpp default (2048). Mostly affects prompt-processing throughput."
+          onChange={(value) => updateDraft("batchSize", value)}
+        />
+        <NumberField
+          label="Micro-batch size"
+          value={draft.ubatchSize}
+          min={0}
+          max={8192}
+          help="Physical micro-batch size (-ub): tokens per compute pass. 0 = llama.cpp default (512). Smaller cuts compute-buffer VRAM; larger can speed up prompt processing."
+          onChange={(value) => updateDraft("ubatchSize", value)}
+        />
+        <SelectField<FlashAttentionMode>
+          label="Flash attention"
+          value={draft.flashAttention}
+          options={["auto", "on", "off"]}
+          help="Fused attention kernel (-fa). Auto lets llama.cpp decide per backend; on usually saves VRAM and speeds up long contexts on modern GPUs."
+          onChange={(value) => updateDraft("flashAttention", value)}
         />
         <ToggleField
           label="Mlock"

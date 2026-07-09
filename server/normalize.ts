@@ -1,5 +1,6 @@
 import type {
   BackendMode,
+  FlashAttentionMode,
   KvCacheType,
   LlamaProfile,
   ReasoningMode,
@@ -38,6 +39,7 @@ const REASONING_MODES: readonly ReasoningMode[] = ["off", "auto"];
 const THREADS_MODES: readonly ThreadsMode[] = ["auto", "manual"];
 const KV_TYPES: readonly KvCacheType[] = ["", "f16", "q8_0", "q4_0", "q4_1"];
 const SPEC_TYPES: readonly SpecType[] = ["draft-mtp", "none"];
+const FLASH_MODES: readonly FlashAttentionMode[] = ["auto", "on", "off"];
 
 function normalizeSpeculative(value: unknown): SpeculativeSettings {
   const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -82,6 +84,9 @@ export function normalizeProfile(input: unknown): LlamaProfile {
     cpuMoe: bool(raw.cpuMoe, false),
     nCpuMoe: num(raw.nCpuMoe, 0),
     temperature: num(raw.temperature, 0.8),
+    batchSize: num(raw.batchSize, 0),
+    ubatchSize: num(raw.ubatchSize, 0),
+    flashAttention: oneOf(raw.flashAttention, FLASH_MODES, "auto"),
     parallelSlots: num(raw.parallelSlots, 1),
     kvCacheK: oneOf(raw.kvCacheK, KV_TYPES, ""),
     kvCacheV: oneOf(raw.kvCacheV, KV_TYPES, ""),

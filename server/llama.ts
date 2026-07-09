@@ -112,6 +112,17 @@ export function buildCommand(profile: LlamaProfile, options: BuildCommandOptions
       args.push("--n-cpu-moe", String(Math.floor(profile.nCpuMoe)));
     }
   }
+  // Batch sizes and flash attention default sensibly in llama.cpp; only pass
+  // them when the profile pins an explicit value (0 / "auto" = leave unset).
+  if (profile.batchSize > 0) {
+    args.push("-b", String(Math.floor(profile.batchSize)));
+  }
+  if (profile.ubatchSize > 0) {
+    args.push("-ub", String(Math.floor(profile.ubatchSize)));
+  }
+  if (profile.flashAttention !== "auto") {
+    args.push("-fa", profile.flashAttention);
+  }
   if (profile.parallelSlots > 0) {
     args.push("-np", String(positiveInteger(profile.parallelSlots, 1)));
   }

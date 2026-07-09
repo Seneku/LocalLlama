@@ -45,6 +45,9 @@ export interface LlamaProfile {
   cpuMoe: boolean; // --cpu-moe: keep all MoE expert weights on the CPU
   nCpuMoe: number; // --n-cpu-moe N: keep the first N layers' experts on CPU (0 = unset; ignored when cpuMoe)
   temperature: number; // --temp (default sampling temperature)
+  batchSize: number; // -b logical batch size (0 = llama.cpp default)
+  ubatchSize: number; // -ub physical micro-batch size (0 = llama.cpp default)
+  flashAttention: FlashAttentionMode; // -fa ("auto" = leave unset)
   parallelSlots: number;
   kvCacheK: KvCacheType;
   kvCacheV: KvCacheType;

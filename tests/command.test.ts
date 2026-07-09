@@ -117,6 +117,27 @@ describe("buildCommand", () => {
     expect(line).not.toContain("--fit"); // fit defaults off
   });
 
+  test("emits batch, micro-batch, and flash-attention flags when pinned", () => {
+    const gemma = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
+    const line = buildCommand(
+      { ...gemma, batchSize: 2048, ubatchSize: 256, flashAttention: "on" as const },
+      { paths, defaultThreads: 12, fileExists: exists }
+    ).args.join(" ");
+
+    expect(line).toContain("-b 2048");
+    expect(line).toContain("-ub 256");
+    expect(line).toContain("-fa on");
+  });
+
+  test("omits batch, micro-batch, and flash-attention at their defaults", () => {
+    const profile = exampleProfiles.find((item) => item.id === "gemma4-coding")!;
+    const line = buildCommand(profile, { paths, defaultThreads: 12, fileExists: exists }).args.join(" ");
+
+    expect(line).not.toContain("-b "); // batchSize 0 = llama.cpp default
+    expect(line).not.toContain("-ub ");
+    expect(line).not.toContain("-fa ");
+  });
+
   test("uses manual overrides for custom tuning", () => {
     const profile = {
       ...exampleProfiles[0],
