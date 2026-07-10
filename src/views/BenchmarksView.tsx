@@ -1,13 +1,14 @@
 import {
   BarChart3,
-  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Copy,
   Gauge,
   GitCompareArrows,
   LineChart,
   Play,
+  Save,
   SlidersHorizontal,
   Square,
   Trash2,
@@ -89,7 +90,7 @@ interface BenchmarksViewProps {
   busy: boolean;
   saveDraft(): Promise<LlamaProfile | null>;
   onOptimize(): void;
-  onApplySettings(settings: Partial<LlamaProfile>): void;
+  onSaveOptimized(profileId: string, settings: Partial<LlamaProfile>, mode: "overwrite" | "copy"): Promise<boolean>;
   onMessage: Notify;
 }
 
@@ -148,7 +149,7 @@ export function BenchmarksView({
   busy,
   saveDraft,
   onOptimize,
-  onApplySettings,
+  onSaveOptimized,
   onMessage
 }: BenchmarksViewProps) {
   const [settings, setSettings] = useState<BenchmarkSettings>(defaultSettings);
@@ -394,16 +395,14 @@ export function BenchmarksView({
     }
   }
 
-  function applySweepSettings() {
+  async function saveSweepSettings(mode: "overwrite" | "copy") {
     if (!sweepResult || Object.keys(sweepResult.bestSettings).length === 0) {
       return;
     }
-    if (draft && draft.id !== sweepResult.profileId) {
-      onMessage(`This sweep tuned "${sweepResult.profileName}" — select that profile to apply its settings.`, "error");
-      return;
+    const ok = await onSaveOptimized(sweepResult.profileId, sweepResult.bestSettings, mode);
+    if (ok) {
+      setSweepDismissed(sweepResult.sweepId);
     }
-    onApplySettings(sweepResult.bestSettings);
-    onMessage("Winning settings applied to the profile draft — save the profile to keep them.", "success");
   }
 
   async function deleteRun(id: string) {
@@ -524,8 +523,8 @@ export function BenchmarksView({
         <SweepResultCard
           result={sweepResult}
           runs={runs}
-          profileMismatch={Boolean(draft && draft.id !== sweepResult.profileId)}
-          onApply={applySweepSettings}
+          saving={busy}
+          onSave={saveSweepSettings}
           onFocusRun={focusRun}
           onDismiss={() => setSweepDismissed(sweepResult.sweepId)}
         />
@@ -884,14 +883,13 @@ export function BenchmarksView({
 interface SweepResultCardProps {
   result: SweepResult;
   runs: BenchmarkRun[];
-  /** True when the selected profile is not the one this sweep tuned. */
-  profileMismatch: boolean;
-  onApply(): void;
+  saving: boolean;
+  onSave(mode: "overwrite" | "copy"): void;
   onFocusRun(runId: string): void;
   onDismiss(): void;
 }
 
-function SweepResultCard({ result, runs, profileMismatch, onApply, onFocusRun, onDismiss }: SweepResultCardProps) {
+function SweepResultCard({ result, runs, saving, onSave, onFocusRun, onDismiss }: SweepResultCardProps) {
   const winner = result.ranked.find((entry) => entry.runId === result.winnerRunId) ?? result.ranked[0];
   const baselineRun = runs.find((run) => run.id === result.baselineRunId) ?? null;
   const baselineScore = baselineRun?.metrics.score ?? null;
@@ -919,19 +917,25 @@ function SweepResultCard({ result, runs, profileMismatch, onApply, onFocusRun, o
               : " · matches the baseline"}
           </small>
         </div>
-        <button
-          className="primary"
-          onClick={onApply}
-          disabled={!hasSettings || profileMismatch}
-          title={
-            profileMismatch
-              ? `This sweep tuned "${result.profileName}" — select that profile to apply its settings.`
-              : "Merge the winning settings into the profile draft"
-          }
-        >
-          <Check size={16} />
-          Apply best settings
-        </button>
+        <div className="sweep-save-actions">
+          <button
+            className="primary"
+            onClick={() => onSave("overwrite")}
+            disabled={!hasSettings || saving}
+            title={`Save these settings into “${result.profileName}”, replacing its current values`}
+          >
+            <Save size={16} />
+            Save to profile
+          </button>
+          <button
+            onClick={() => onSave("copy")}
+            disabled={!hasSettings || saving}
+            title={`Create a new “${result.profileName} (optimized)” profile with these settings`}
+          >
+            <Copy size={16} />
+            Save as copy
+          </button>
+        </div>
       </div>
       <div className="sweep-ranked">
         {result.ranked.slice(0, 8).map((entry, index) => (

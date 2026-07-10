@@ -2914,3 +2914,9 @@ button.fit-pill {
   border-color: var(--amber-border);
   color: var(--amber);
 }
+
+.sweep-save-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}

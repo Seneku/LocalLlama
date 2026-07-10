@@ -330,8 +330,44 @@ export default function App() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
-  function applyProfileSettings(settings: Partial<LlamaProfile>) {
-    setDraft((current) => (current ? { ...current, ...settings } : current));
+  // Persist an Optimize sweep's winning settings. Operates on the profile the
+  // sweep tuned (by id), independent of the current selection, so it works from
+  // the Benchmarks view regardless of which profile is drafted. "overwrite"
+  // updates that profile in place; "copy" creates a new "(optimized)" profile.
+  async function saveOptimizedProfile(
+    profileId: string,
+    settings: Partial<LlamaProfile>,
+    mode: "overwrite" | "copy"
+  ): Promise<boolean> {
+    const base = profiles.find((profile) => profile.id === profileId);
+    if (!base) {
+      notify("The profile this sweep tuned no longer exists.", "error");
+      return false;
+    }
+    setBusy(true);
+    try {
+      if (mode === "overwrite") {
+        const saved = await api.updateProfile({ ...base, ...settings });
+        setProfiles((current) => current.map((profile) => (profile.id === saved.id ? saved : profile)));
+        if (selectedId === saved.id) {
+          setDraft(cloneProfile(saved));
+        }
+        notify(`Optimized settings saved to “${saved.name}”.`, "success");
+      } else {
+        const saved = await api.createProfile(createProfileFrom({ ...base, ...settings }, `${base.name} (optimized)`));
+        setProfiles((current) => [...current, saved]);
+        setSelectedId(saved.id);
+        setDraft(cloneProfile(saved));
+        setView("server");
+        notify(`Created “${saved.name}” with the optimized settings.`, "success");
+      }
+      return true;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   // The sweep runs against the saved profile, so persist the draft first.
@@ -488,7 +524,7 @@ export default function App() {
             busy={busy}
             saveDraft={saveDraft}
             onOptimize={() => void openOptimize()}
-            onApplySettings={applyProfileSettings}
+            onSaveOptimized={saveOptimizedProfile}
             onMessage={notify}
           />
         </div>
