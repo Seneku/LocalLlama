@@ -1,6 +1,7 @@
 // Pure, DOM-free series/axis math for the benchmark trend chart. Kept apart
 // from the SVG component so it can be unit-tested like the other shared
 // normalizers (hf.ts, connect.ts).
+import { formatModelType } from "./modelLabel";
 import type { BenchmarkRun } from "./types";
 
 export type TrendMetric = "pp" | "tg" | "score";
@@ -49,7 +50,7 @@ function metricStddev(run: BenchmarkRun, metric: TrendMetric): number | null {
 
 function groupKey(run: BenchmarkRun, groupBy: TrendGroupBy): string {
   if (groupBy === "model") {
-    return run.env?.modelType ?? modelFileName(run.profile.modelPath);
+    return formatModelType(run.env) ?? modelFileName(run.profile.modelPath);
   }
   return run.profileName;
 }

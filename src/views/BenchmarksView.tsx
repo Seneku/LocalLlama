@@ -24,6 +24,7 @@ import type { Notify } from "../components/Toasts";
 import { TrendChart } from "../components/TrendChart";
 import { ConfirmButton, CopyButton, NumberField, SelectField, ToggleField } from "../components/ui";
 import { buildTrendSeries, type TrendGroupBy, type TrendMetric } from "../shared/chartMath";
+import { formatModelType } from "../shared/modelLabel";
 import type {
   BenchmarkCommandPreview,
   BenchmarkEnv,
@@ -839,7 +840,7 @@ export function BenchmarksView({
                 </span>
                 {hasEnvColumns ? (
                   <span className="env-cell" title={run.env?.modelType ?? undefined}>
-                    {run.env?.modelType ?? "-"}
+                    {formatModelType(run.env) ?? "-"}
                   </span>
                 ) : null}
                 {hasEnvColumns ? <span className="env-cell">{run.env?.buildNumber ?? "-"}</span> : null}
@@ -1005,8 +1006,10 @@ function CompareTable({ runs, onClose }: CompareTableProps) {
   const differingSettings = SETTING_FIELDS.filter(
     ({ key }) => new Set(runs.map((run) => String(run.settings[key]))).size > 1
   );
+  const envDisplay = (run: BenchmarkRun, key: keyof BenchmarkEnv): string =>
+    key === "modelType" ? formatModelType(run.env) ?? "-" : String(run.env?.[key] ?? "-");
   const differingEnv = ENV_FIELDS.filter(
-    ({ key }) => new Set(runs.map((run) => String(run.env?.[key] ?? "-"))).size > 1
+    ({ key }) => new Set(runs.map((run) => envDisplay(run, key))).size > 1
   );
 
   function bestIndex(values: Array<number | null>, higherIsBetter: boolean): number {
@@ -1067,7 +1070,7 @@ function CompareTable({ runs, onClose }: CompareTableProps) {
               <tr key={`env-${key}`} className="config-row">
                 <td>{label}</td>
                 {runs.map((run) => (
-                  <td key={run.id}>{String(run.env?.[key] ?? "-")}</td>
+                  <td key={run.id}>{envDisplay(run, key)}</td>
                 ))}
               </tr>
             ))}
