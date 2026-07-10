@@ -167,8 +167,6 @@ export function BenchmarksView({
   const [sweepStatus, setSweepStatus] = useState<SweepStatus>(idleSweep);
   const [sweepResult, setSweepResult] = useState<SweepResult | null>(null);
   const [sweepDismissed, setSweepDismissed] = useState<string | null>(null);
-  const sweepWasRunning = useRef(false);
-  const loadedSweepResult = useRef(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [profileFilter, setProfileFilter] = useState<string>("all");
   const [backendFilter, setBackendFilter] = useState<ResolvedBackend | "all">("all");
@@ -269,22 +267,6 @@ export function BenchmarksView({
             : nextLogs
         );
         setLoaded(true);
-        // A sweep just finished (or a finished one exists from before this
-        // mount): pull its verdict for the winner card.
-        if (nextSweep.state === "running") {
-          sweepWasRunning.current = true;
-        } else if (sweepWasRunning.current || !loadedSweepResult.current) {
-          sweepWasRunning.current = false;
-          loadedSweepResult.current = true;
-          api
-            .sweepResult()
-            .then((result) => {
-              if (!disposed) {
-                setSweepResult(result);
-              }
-            })
-            .catch(() => undefined);
-        }
       } catch {
         // Polling stays quiet; direct actions surface their own errors.
       }
@@ -304,6 +286,33 @@ export function BenchmarksView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, sweepStatus.state]);
+
+  // Winner-card data. A separate effect keyed on the idle transition: the
+  // polling effect above re-runs (and cancels its own async work) on every
+  // sweep state change, so a fetch started inside it at completion time would
+  // be torn down by the very transition that scheduled it — leaving a stale
+  // card from a previous sweep on screen.
+  useEffect(() => {
+    if (sweepRunning) {
+      // A new sweep invalidates whatever card was showing.
+      setSweepResult(null);
+      return;
+    }
+    let stale = false;
+    // After a completed sweep the status still carries its id; on a fresh
+    // mount it is null and the server returns the latest stored sweep.
+    api
+      .sweepResult(sweepStatus.sweepId ?? undefined)
+      .then((result) => {
+        if (!stale) {
+          setSweepResult(result);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [sweepRunning, sweepStatus.sweepId]);
 
   useEffect(() => {
     if (!draft) {
@@ -514,6 +523,7 @@ export function BenchmarksView({
         <SweepResultCard
           result={sweepResult}
           runs={runs}
+          profileMismatch={Boolean(draft && draft.id !== sweepResult.profileId)}
           onApply={applySweepSettings}
           onFocusRun={focusRun}
           onDismiss={() => setSweepDismissed(sweepResult.sweepId)}
@@ -873,12 +883,14 @@ export function BenchmarksView({
 interface SweepResultCardProps {
   result: SweepResult;
   runs: BenchmarkRun[];
+  /** True when the selected profile is not the one this sweep tuned. */
+  profileMismatch: boolean;
   onApply(): void;
   onFocusRun(runId: string): void;
   onDismiss(): void;
 }
 
-function SweepResultCard({ result, runs, onApply, onFocusRun, onDismiss }: SweepResultCardProps) {
+function SweepResultCard({ result, runs, profileMismatch, onApply, onFocusRun, onDismiss }: SweepResultCardProps) {
   const winner = result.ranked.find((entry) => entry.runId === result.winnerRunId) ?? result.ranked[0];
   const baselineRun = runs.find((run) => run.id === result.baselineRunId) ?? null;
   const baselineScore = baselineRun?.metrics.score ?? null;
@@ -906,7 +918,16 @@ function SweepResultCard({ result, runs, onApply, onFocusRun, onDismiss }: Sweep
               : " · matches the baseline"}
           </small>
         </div>
-        <button className="primary" onClick={onApply} disabled={!hasSettings} title="Merge the winning settings into the profile draft">
+        <button
+          className="primary"
+          onClick={onApply}
+          disabled={!hasSettings || profileMismatch}
+          title={
+            profileMismatch
+              ? `This sweep tuned "${result.profileName}" — select that profile to apply its settings.`
+              : "Merge the winning settings into the profile draft"
+          }
+        >
           <Check size={16} />
           Apply best settings
         </button>

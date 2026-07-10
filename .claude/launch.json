@@ -12,6 +12,12 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["server/index.ts"],
       "port": 4187
+    },
+    {
+      "name": "localllama-preview",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [".claude/preview-server.ts"],
+      "port": 4218
     }
   ]
 }
