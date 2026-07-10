@@ -2,7 +2,7 @@
 
 A local web UI for tuning, launching, and benchmarking [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` configurations. Build named profiles, see the exact command before you run it, get a GGUF-accurate VRAM estimate for your GPU, run `llama-bench` sweeps, and compare the results — without hand-editing `.cmd` files.
 
-> **Platform:** Windows, Linux, and macOS. LocalLlama runs against a local llama.cpp build you already have. GPU/VRAM detection uses `nvidia-smi` on Windows & Linux (NVIDIA), and models Apple Silicon's Metal GPU as unified memory on macOS (an approximate working-set budget; Intel Macs fall back to CPU).
+> **Platform:** Windows, Linux, and macOS. LocalLlama runs against a local llama.cpp build you already have. GPU/VRAM detection covers NVIDIA (`nvidia-smi`, live free VRAM), AMD and Intel discrete GPUs (Windows driver registry / Linux `rocm-smi` & sysfs), and Apple Silicon's Metal GPU modeled as unified memory on macOS (an approximate working-set budget; Intel Macs fall back to CPU).
 
 ## Download
 
@@ -24,8 +24,10 @@ Grab the binary for your platform from the [Releases page](https://github.com/Se
 
 ## Features
 
-- **Get started in-app** — a setup guide that recommends the right prebuilt llama.cpp Windows build for your hardware (with direct release links), plus a **model browser** that searches Hugging Face for GGUF models, flags which quantizations fit your GPU, and downloads them straight into your models folder with live progress.
-- **Profiles** — save reusable server configs (model, context, GPU layers, KV-cache quant, parallel slots, speculative decoding, etc.), with a live-updating preview of the exact `llama-server` command.
+- **Get started in-app** — a setup guide that recommends the right prebuilt llama.cpp Windows build for your hardware (with direct release links), plus a **model browser** that searches Hugging Face for GGUF models and downloads them straight into your models folder with live progress. Recommendations are grouped by use case (chat / coding / reasoning / vision), MoE-aware, and deduped across requant mirrors, with a ★ badge on the quant that best fits your hardware.
+- **Pre-download fit checks** — reads just the GGUF header from Hugging Face (a few MB) and runs the full estimator *before* you download: exact verdicts at your chosen context size, including partial-offload and MoE `--cpu-moe` alternatives.
+- **One-click Optimize** — benchmarks a short, smart series of setting combinations (GPU layers, flash attention, batch/micro-batch, KV-cache quant), skips configs that won't fit VRAM, ranks results with noise awareness, and applies the winner to your profile in one click.
+- **Profiles** — save reusable server configs (model, context, GPU layers, batch sizes, flash attention, KV-cache quant, parallel slots, speculative decoding, etc.), with a live-updating preview of the exact `llama-server` command.
 - **Accurate VRAM estimation** — parses the GGUF tensor table for exact per-layer weights and KV geometry, and models the things simple heuristics miss: interleaved **sliding-window attention** (Gemma-family), **hybrid SSM** layers (Qwen3.5/recurrent), **MTP/nextn** blocks, tied-embedding output heads, and llama.cpp's offload order. Calibrated against measured `llama-server` allocations.
 - **GPU-layer auto-recommend** — inverts the estimator to suggest the largest `-ngl` that fits your currently-free VRAM (or to offload *more* when there's headroom), with one-click apply.
 - **Benchmarking** — run `llama-bench` from a profile, watch live logs, and keep a history of results with prompt/generation throughput, latency, and a blended score. Filter by profile/backend/status and compare runs side by side.
@@ -36,7 +38,7 @@ Grab the binary for your platform from the [Releases page](https://github.com/Se
 
 - [Bun](https://bun.sh) (the runtime, package manager, and test runner)
 - A local llama.cpp build with `llama-server` / `llama-bench` (`.exe` on Windows)
-- Optional: an NVIDIA GPU with `nvidia-smi` on `PATH` for VRAM fit estimates (the app still works CPU-only without it)
+- Optional: a GPU for VRAM fit estimates — NVIDIA (`nvidia-smi` on `PATH`), AMD/Intel discrete (detected via the Windows driver registry or Linux `rocm-smi`/sysfs), or Apple Silicon (the app still works CPU-only without one)
 
 ## Getting started
 
