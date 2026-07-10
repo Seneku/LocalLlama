@@ -46,10 +46,35 @@ describe("formatModelType", () => {
     );
   });
 
-  test("corrects MoE-style buckets", () => {
-    expect(formatModelType(env({ modelType: "llama4 8x7B Q4_K - Medium", modelParams: 47_000_000_000 }))).toBe(
+  test("keeps a bucket that already roughly matches the real count", () => {
+    // Orinth: llama.cpp says "9B", real is 9.2B — trust the cleaner label.
+    expect(formatModelType(env({ modelType: "qwen35 9B Q4_K - Medium", modelParams: 9_197_093_888 }))).toBe(
+      "qwen35 9B Q4_K - Medium"
+    );
+    // Qwen-7B family: 7.6B params marketed as "7B" — don't churn it to "7.6B".
+    expect(formatModelType(env({ modelType: "qwen2 7B Q4_K - Medium", modelParams: 7_600_000_000 }))).toBe(
+      "qwen2 7B Q4_K - Medium"
+    );
+  });
+
+  test("keeps an MoE bucket when its total roughly matches the real count", () => {
+    // Mixtral 8x7B = 56B nominal, ~46.7B real params — keep the informative label.
+    expect(formatModelType(env({ modelType: "llama4 8x7B Q4_K - Medium", modelParams: 46_700_000_000 }))).toBe(
+      "llama4 8x7B Q4_K - Medium"
+    );
+  });
+
+  test("corrects a wrong MoE bucket", () => {
+    expect(formatModelType(env({ modelType: "llama4 8x1B Q4_K - Medium", modelParams: 47_000_000_000 }))).toBe(
       "llama4 47B Q4_K - Medium"
     );
+  });
+
+  test("keeps llama.cpp's active-expert MoE notation when the total matches", () => {
+    // Qwen 35B-A3B: total ~36B params; "35B.A3B" is informative, don't annotate.
+    expect(
+      formatModelType(env({ modelType: "qwen35moe 35B.A3B all F32 (guessed)", modelParams: 36_000_000_000 }))
+    ).toBe("qwen35moe 35B.A3B all F32 (guessed)");
   });
 
   test("keeps the string unchanged when params are unavailable", () => {
