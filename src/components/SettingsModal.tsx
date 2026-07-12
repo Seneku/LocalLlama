@@ -120,8 +120,11 @@ export function SettingsModal({ open, onClose, onConfigChanged, notify }: Settin
         ) : (
           <>
             <p className="modal-hint">
-              Point LocalLlama at your llama.cpp installation. Binary paths are derived from the root — override
-              them only if your build lives elsewhere. Empty fields use the defaults shown as placeholders.
+              Point LocalLlama at your llama.cpp folder — binaries are found automatically whether you extracted a
+              release zip there (folder root), built from source (<code>build/bin</code>), or keep separate builds
+              in <code>dist-cuda</code> / <code>cuda</code> / <code>cpu</code> subfolders. Leave the binary fields
+              empty to auto-detect (the resolved path shows as the placeholder); fill one in only to pin a specific
+              build.
             </p>
 
             <div className="settings-fields">

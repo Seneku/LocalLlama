@@ -35,12 +35,42 @@ describe("settings", () => {
     const root = path.join(tempDir, "llama.cpp");
     saveSettings({ llamaRoot: root });
 
-    // Binaries are suffixed with .exe only on Windows.
+    // Binaries are suffixed with .exe only on Windows. Nothing exists on
+    // disk, so the display fallbacks apply: release-zip root for GPU,
+    // build/bin for CPU.
     const exe = process.platform === "win32" ? ".exe" : "";
-    const paths = getRuntimePaths();
+    const paths = getRuntimePaths(() => false);
     expect(paths.llamaRoot).toBe(root);
-    expect(paths.cudaServerPath).toBe(path.join(root, "dist-cuda", `llama-server${exe}`));
+    expect(paths.cudaServerPath).toBe(path.join(root, `llama-server${exe}`));
     expect(paths.cpuBenchPath).toBe(path.join(root, "build", "bin", `llama-bench${exe}`));
+  });
+
+  test("binary paths probe common llama.cpp layouts and use what exists", () => {
+    const root = path.join(tempDir, "llama.cpp");
+    saveSettings({ llamaRoot: root });
+    const exe = process.platform === "win32" ? ".exe" : "";
+    const server = `llama-server${exe}`;
+
+    // Release zip extracted to the root: both slots find the root binary.
+    const rootOnly = new Set([path.join(root, server)]);
+    let paths = getRuntimePaths((p) => rootOnly.has(p));
+    expect(paths.cudaServerPath).toBe(path.join(root, server));
+    expect(paths.cpuServerPath).toBe(path.join(root, server));
+
+    // Side-by-side builds: the deliberate per-build folders win over the root.
+    const sideBySide = new Set([
+      path.join(root, server),
+      path.join(root, "dist-cuda", server),
+      path.join(root, "build", "bin", server)
+    ]);
+    paths = getRuntimePaths((p) => sideBySide.has(p));
+    expect(paths.cudaServerPath).toBe(path.join(root, "dist-cuda", server));
+    expect(paths.cpuServerPath).toBe(path.join(root, "build", "bin", server));
+
+    // Source build only: the GPU slot falls through to build/bin too.
+    const sourceBuild = new Set([path.join(root, "build", "bin", server)]);
+    paths = getRuntimePaths((p) => sourceBuild.has(p));
+    expect(paths.cudaServerPath).toBe(path.join(root, "build", "bin", server));
   });
 
   test("explicit binary overrides beat derived defaults", () => {

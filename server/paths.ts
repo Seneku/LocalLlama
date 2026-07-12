@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import path from "node:path";
 
@@ -22,8 +23,36 @@ const LLAMA_BENCH = `llama-bench${EXE}`;
 // Users set their real path in Settings (with the folder picker) on first run.
 const DEFAULT_LLAMA_ROOT = path.join(homedir(), "llama.cpp");
 
-// Precedence: saved settings > environment variable > default derived from llamaRoot.
-export function getRuntimePaths(): RuntimePaths {
+// Common layouts under the llama.cpp root. Official release zips extract the
+// binaries to the folder ROOT; source builds put them in build/bin; dist-cuda
+// / cuda / cpu / dist-cpu are folder-per-build conventions for people who keep
+// a GPU and a CPU build side by side. Probe order puts the deliberate
+// per-build folders first so they win over a generic root binary; the
+// `fallback` entry is what Settings displays when nothing exists yet (root for
+// GPU — matching the "extract the release zip" guide — and build/bin for CPU).
+const GPU_LAYOUT = { subdirs: [["dist-cuda"], ["cuda"], [], ["build", "bin"]], fallback: [] as string[] };
+const CPU_LAYOUT = { subdirs: [["build", "bin"], ["cpu"], ["dist-cpu"], []], fallback: ["build", "bin"] };
+
+/**
+ * Resolve a binary under the llama.cpp root by probing the common layouts and
+ * returning the first that exists on disk; falls back to the expected location
+ * so Settings can show where the file should go. Exported for tests.
+ */
+export function resolveBinary(
+  llamaRoot: string,
+  binary: string,
+  layout: { subdirs: string[][]; fallback: string[] },
+  fileExists: (filePath: string) => boolean
+): string {
+  const found = layout.subdirs
+    .map((parts) => path.join(llamaRoot, ...parts, binary))
+    .find(fileExists);
+  return found ?? path.join(llamaRoot, ...layout.fallback, binary);
+}
+
+// Precedence: saved settings > environment variable > first existing common
+// layout under llamaRoot (release-zip root, build/bin, dist-cuda, ...).
+export function getRuntimePaths(fileExists: (filePath: string) => boolean = fs.existsSync): RuntimePaths {
   const settings = getSettings();
   const llamaRoot = settings.llamaRoot || process.env.LOCALLLAMA_LLAMA_ROOT || DEFAULT_LLAMA_ROOT;
   const dataPath = process.env.LOCALLLAMA_DATA_DIR ?? path.resolve(process.cwd(), "data");
@@ -33,19 +62,19 @@ export function getRuntimePaths(): RuntimePaths {
     cudaServerPath:
       settings.cudaServerPath ||
       process.env.LOCALLLAMA_CUDA_SERVER ||
-      path.join(llamaRoot, "dist-cuda", LLAMA_SERVER),
+      resolveBinary(llamaRoot, LLAMA_SERVER, GPU_LAYOUT, fileExists),
     cpuServerPath:
       settings.cpuServerPath ||
       process.env.LOCALLLAMA_CPU_SERVER ||
-      path.join(llamaRoot, "build", "bin", LLAMA_SERVER),
+      resolveBinary(llamaRoot, LLAMA_SERVER, CPU_LAYOUT, fileExists),
     cudaBenchPath:
       settings.cudaBenchPath ||
       process.env.LOCALLLAMA_CUDA_BENCH ||
-      path.join(llamaRoot, "dist-cuda", LLAMA_BENCH),
+      resolveBinary(llamaRoot, LLAMA_BENCH, GPU_LAYOUT, fileExists),
     cpuBenchPath:
       settings.cpuBenchPath ||
       process.env.LOCALLLAMA_CPU_BENCH ||
-      path.join(llamaRoot, "build", "bin", LLAMA_BENCH),
+      resolveBinary(llamaRoot, LLAMA_BENCH, CPU_LAYOUT, fileExists),
     dataPath
   };
 }
